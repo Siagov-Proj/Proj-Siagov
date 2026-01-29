@@ -20,7 +20,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Search, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, ArrowLeft } from 'lucide-react';
 
 // Tipos
 interface INormativo {
@@ -82,11 +82,18 @@ export default function NormativosPage() {
         <div className="space-y-6">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight">Normativos</h1>
-                    <p className="text-muted-foreground">
-                        Gerencie os normativos e subcategorias dos documentos
-                    </p>
+                <div className="flex items-center gap-4">
+                    <Button variant="ghost" size="icon" asChild>
+                        <Link href="/cadastros">
+                            <ArrowLeft className="h-5 w-5" />
+                        </Link>
+                    </Button>
+                    <div>
+                        <h1 className="text-2xl font-bold tracking-tight">Normativos</h1>
+                        <p className="text-muted-foreground">
+                            Gerencie os normativos e subcategorias dos documentos
+                        </p>
+                    </div>
                 </div>
                 <Button asChild className="bg-primary hover:opacity-90 text-primary-foreground shadow-lg">
                     <Link href="/cadastros/normativos/novo">

@@ -1,23 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from '@/components/ui/select';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
 import {
     Table,
     TableBody,
@@ -34,8 +21,6 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ActionBar } from '@/components/ui/action-bar';
-import { FieldTooltip } from '@/components/ui/field-tooltip';
 import {
     Plus,
     Search,
@@ -44,6 +29,7 @@ import {
     Lock,
     Unlock,
     AlertTriangle,
+    ArrowLeft,
 } from 'lucide-react';
 import { formatDate } from '@/utils/formatters';
 import type { IExercicioFinanceiro } from '@/types';
@@ -91,23 +77,10 @@ const exerciciosIniciais: IExercicioFinanceiro[] = [
     },
 ];
 
-// Estado vazio do formulário
-const formDataVazio = {
-    ano: ANO_CORRENTE,
-    instituicaoId: '',
-    dataAbertura: new Date().toISOString().split('T')[0],
-    dataFechamento: '',
-    ativo: true,
-};
-
 export default function ExerciciosFinanceirosPage() {
-    const [exercicios, setExercicios] =
-        useState<IExercicioFinanceiro[]>(exerciciosIniciais);
-    const [dialogAberto, setDialogAberto] = useState(false);
-    const [editandoId, setEditandoId] = useState<string | null>(null);
+    const router = useRouter();
+    const [exercicios, setExercicios] = useState<IExercicioFinanceiro[]>(exerciciosIniciais);
     const [termoBusca, setTermoBusca] = useState('');
-    const [formData, setFormData] = useState(formDataVazio);
-    const [erros, setErros] = useState<Record<string, string>>({});
 
     const exerciciosFiltrados = exercicios.filter(
         (ex) =>
@@ -123,119 +96,18 @@ export default function ExerciciosFinanceirosPage() {
         return ano >= ANO_CORRENTE;
     };
 
-    const abrirNovo = () => {
-        setFormData(formDataVazio);
-        setEditandoId(null);
-        setErros({});
-        setDialogAberto(true);
+    const handleNovo = () => {
+        router.push('/cadastros/exercicios/novo');
     };
 
-    const editar = (exercicio: IExercicioFinanceiro) => {
+    const handleEdit = (exercicio: IExercicioFinanceiro) => {
         if (!podeEditar(exercicio.ano)) {
             alert(
                 `O exercício de ${exercicio.ano} não pode ser editado. Apenas o exercício do ano corrente (${ANO_CORRENTE}) pode ser modificado.`
             );
             return;
         }
-
-        setFormData({
-            ano: exercicio.ano,
-            instituicaoId: exercicio.instituicaoId,
-            dataAbertura: exercicio.dataAbertura
-                ? new Date(exercicio.dataAbertura).toISOString().split('T')[0]
-                : '',
-            dataFechamento: exercicio.dataFechamento
-                ? new Date(exercicio.dataFechamento).toISOString().split('T')[0]
-                : '',
-            ativo: exercicio.ativo,
-        });
-        setEditandoId(exercicio.id);
-        setErros({});
-        setDialogAberto(true);
-    };
-
-    const limpar = () => {
-        setFormData(formDataVazio);
-        setErros({});
-    };
-
-    const validar = (): boolean => {
-        const novosErros: Record<string, string> = {};
-
-        if (!formData.ano || formData.ano < 2000 || formData.ano > 2100) {
-            novosErros.ano = 'Ano inválido (entre 2000 e 2100)';
-        }
-
-        if (!formData.instituicaoId) {
-            novosErros.instituicaoId = 'Instituição é obrigatória';
-        }
-
-        if (!formData.dataAbertura) {
-            novosErros.dataAbertura = 'Data de abertura é obrigatória';
-        }
-
-        // Verifica se já existe exercício para o ano e instituição
-        const existente = exercicios.find(
-            (e) =>
-                e.ano === formData.ano &&
-                e.instituicaoId === formData.instituicaoId &&
-                e.id !== editandoId
-        );
-
-        if (existente) {
-            novosErros.ano =
-                'Já existe um exercício para este ano e instituição';
-        }
-
-        // Não permite criar exercícios para anos anteriores
-        if (!editandoId && formData.ano < ANO_CORRENTE) {
-            novosErros.ano = `Não é permitido criar exercícios para anos anteriores a ${ANO_CORRENTE}`;
-        }
-
-        setErros(novosErros);
-        return Object.keys(novosErros).length === 0;
-    };
-
-    const salvar = () => {
-        if (!validar()) return;
-
-        if (editandoId) {
-            setExercicios(
-                exercicios.map((e) =>
-                    e.id === editandoId
-                        ? {
-                            ...e,
-                            ano: formData.ano,
-                            instituicaoId: formData.instituicaoId,
-                            dataAbertura: new Date(formData.dataAbertura),
-                            dataFechamento: formData.dataFechamento
-                                ? new Date(formData.dataFechamento)
-                                : undefined,
-                            ativo: formData.ativo,
-                            updatedAt: new Date(),
-                        }
-                        : e
-                )
-            );
-        } else {
-            const novoExercicio: IExercicioFinanceiro = {
-                id: String(Date.now()),
-                ano: formData.ano,
-                instituicaoId: formData.instituicaoId,
-                dataAbertura: new Date(formData.dataAbertura),
-                dataFechamento: formData.dataFechamento
-                    ? new Date(formData.dataFechamento)
-                    : undefined,
-                ativo: formData.ativo,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-            };
-            setExercicios([...exercicios, novoExercicio]);
-        }
-
-        setDialogAberto(false);
-        setFormData(formDataVazio);
-        setEditandoId(null);
+        router.push(`/cadastros/exercicios/${exercicio.id}`);
     };
 
     const obterNomeInstituicao = (id: string) => {
@@ -246,16 +118,23 @@ export default function ExerciciosFinanceirosPage() {
         <div className="space-y-6">
             {/* Cabeçalho */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-                        <Calendar className="h-6 w-6" />
-                        Exercícios Financeiros
-                    </h1>
-                    <p className="text-muted-foreground">
-                        Gerenciamento de exercícios financeiros por instituição
-                    </p>
+                <div className="flex items-center gap-4">
+                    <Button variant="ghost" size="icon" asChild>
+                        <Link href="/cadastros">
+                            <ArrowLeft className="h-5 w-5" />
+                        </Link>
+                    </Button>
+                    <div>
+                        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+                            <Calendar className="h-6 w-6" />
+                            Exercícios Financeiros
+                        </h1>
+                        <p className="text-muted-foreground">
+                            Gerenciamento de exercícios financeiros por instituição
+                        </p>
+                    </div>
                 </div>
-                <Button onClick={abrirNovo}>
+                <Button onClick={handleNovo}>
                     <Plus className="mr-2 h-4 w-4" />
                     Novo Exercício
                 </Button>
@@ -278,8 +157,7 @@ export default function ExerciciosFinanceirosPage() {
                         <div>
                             <CardTitle>Lista de Exercícios</CardTitle>
                             <CardDescription>
-                                {exerciciosFiltrados.length} exercício(s)
-                                encontrado(s)
+                                {exerciciosFiltrados.length} exercício(s) encontrado(s)
                             </CardDescription>
                         </div>
                         <div className="relative w-full sm:w-64">
@@ -300,21 +178,11 @@ export default function ExerciciosFinanceirosPage() {
                                 <TableRow>
                                     <TableHead className="w-20">Ano</TableHead>
                                     <TableHead>Instituição</TableHead>
-                                    <TableHead className="w-32">
-                                        Abertura
-                                    </TableHead>
-                                    <TableHead className="w-32">
-                                        Fechamento
-                                    </TableHead>
-                                    <TableHead className="w-24">
-                                        Status
-                                    </TableHead>
-                                    <TableHead className="w-24 text-center">
-                                        Edição
-                                    </TableHead>
-                                    <TableHead className="w-20 text-center">
-                                        Ações
-                                    </TableHead>
+                                    <TableHead className="w-32">Abertura</TableHead>
+                                    <TableHead className="w-32">Fechamento</TableHead>
+                                    <TableHead className="w-24">Status</TableHead>
+                                    <TableHead className="w-24 text-center">Edição</TableHead>
+                                    <TableHead className="w-20 text-center">Ações</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -334,49 +202,33 @@ export default function ExerciciosFinanceirosPage() {
                                                 {exercicio.ano}
                                             </TableCell>
                                             <TableCell className="font-medium">
-                                                {obterNomeInstituicao(
-                                                    exercicio.instituicaoId
-                                                )}
+                                                {obterNomeInstituicao(exercicio.instituicaoId)}
                                             </TableCell>
                                             <TableCell className="text-sm">
-                                                {formatDate(
-                                                    exercicio.dataAbertura
-                                                )}
+                                                {formatDate(exercicio.dataAbertura)}
                                             </TableCell>
                                             <TableCell className="text-sm">
                                                 {exercicio.dataFechamento
-                                                    ? formatDate(
-                                                        exercicio.dataFechamento
-                                                    )
+                                                    ? formatDate(exercicio.dataFechamento)
                                                     : '-'}
                                             </TableCell>
                                             <TableCell>
                                                 <Badge
-                                                    variant={
-                                                        exercicio.ativo
-                                                            ? 'default'
-                                                            : 'secondary'
-                                                    }
+                                                    variant={exercicio.ativo ? 'default' : 'secondary'}
                                                 >
-                                                    {exercicio.ativo
-                                                        ? 'Aberto'
-                                                        : 'Fechado'}
+                                                    {exercicio.ativo ? 'Aberto' : 'Fechado'}
                                                 </Badge>
                                             </TableCell>
                                             <TableCell className="text-center">
                                                 {podeEditar(exercicio.ano) ? (
                                                     <div className="flex items-center justify-center gap-1 text-green-600 dark:text-green-400">
                                                         <Unlock className="h-4 w-4" />
-                                                        <span className="text-xs">
-                                                            Liberado
-                                                        </span>
+                                                        <span className="text-xs">Liberado</span>
                                                     </div>
                                                 ) : (
                                                     <div className="flex items-center justify-center gap-1 text-red-600 dark:text-red-400">
                                                         <Lock className="h-4 w-4" />
-                                                        <span className="text-xs">
-                                                            Bloqueado
-                                                        </span>
+                                                        <span className="text-xs">Bloqueado</span>
                                                     </div>
                                                 )}
                                             </TableCell>
@@ -385,18 +237,10 @@ export default function ExerciciosFinanceirosPage() {
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"
-                                                        onClick={() =>
-                                                            editar(exercicio)
-                                                        }
-                                                        disabled={
-                                                            !podeEditar(
-                                                                exercicio.ano
-                                                            )
-                                                        }
+                                                        onClick={() => handleEdit(exercicio)}
+                                                        disabled={!podeEditar(exercicio.ano)}
                                                         title={
-                                                            podeEditar(
-                                                                exercicio.ano
-                                                            )
+                                                            podeEditar(exercicio.ano)
                                                                 ? 'Editar exercício'
                                                                 : `Exercício de ${exercicio.ano} bloqueado para edição`
                                                         }
@@ -413,188 +257,6 @@ export default function ExerciciosFinanceirosPage() {
                     </div>
                 </CardContent>
             </Card>
-
-            {/* Dialog de Formulário */}
-            <Dialog open={dialogAberto} onOpenChange={setDialogAberto}>
-                <DialogContent className="max-w-lg">
-                    <DialogHeader>
-                        <DialogTitle>
-                            {editandoId
-                                ? 'Editar Exercício Financeiro'
-                                : 'Novo Exercício Financeiro'}
-                        </DialogTitle>
-                        <DialogDescription>
-                            {editandoId
-                                ? 'Altere os dados do exercício financeiro'
-                                : 'Cadastre um novo exercício financeiro'}
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div className="space-y-4">
-                        {/* Ano */}
-                        <div className="space-y-2">
-                            <div className="flex items-center gap-1">
-                                <Label htmlFor="ano">
-                                    Ano
-                                    <span className="text-red-500 ml-1">*</span>
-                                </Label>
-                                <FieldTooltip content="Ano do exercício financeiro (4 dígitos)" />
-                            </div>
-                            <Input
-                                id="ano"
-                                type="number"
-                                min={2000}
-                                max={2100}
-                                value={formData.ano}
-                                onChange={(e) =>
-                                    setFormData({
-                                        ...formData,
-                                        ano: parseInt(e.target.value) || 0,
-                                    })
-                                }
-                                className={erros.ano ? 'border-red-500' : ''}
-                                disabled={!!editandoId}
-                            />
-                            {erros.ano && (
-                                <p className="text-sm text-red-500">
-                                    {erros.ano}
-                                </p>
-                            )}
-                        </div>
-
-                        {/* Instituição */}
-                        <div className="space-y-2">
-                            <div className="flex items-center gap-1">
-                                <Label htmlFor="instituicaoId">
-                                    Instituição
-                                    <span className="text-red-500 ml-1">*</span>
-                                </Label>
-                                <FieldTooltip content="Instituição vinculada ao exercício" />
-                            </div>
-                            <Select
-                                value={formData.instituicaoId}
-                                onValueChange={(valor) =>
-                                    setFormData({
-                                        ...formData,
-                                        instituicaoId: valor,
-                                    })
-                                }
-                                disabled={!!editandoId}
-                            >
-                                <SelectTrigger
-                                    className={
-                                        erros.instituicaoId
-                                            ? 'border-red-500'
-                                            : ''
-                                    }
-                                >
-                                    <SelectValue placeholder="Selecione a instituição" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {mockInstituicoes.map((inst) => (
-                                        <SelectItem
-                                            key={inst.id}
-                                            value={inst.id}
-                                        >
-                                            {inst.nome}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            {erros.instituicaoId && (
-                                <p className="text-sm text-red-500">
-                                    {erros.instituicaoId}
-                                </p>
-                            )}
-                        </div>
-
-                        {/* Data de Abertura */}
-                        <div className="space-y-2">
-                            <div className="flex items-center gap-1">
-                                <Label htmlFor="dataAbertura">
-                                    Data de Abertura
-                                    <span className="text-red-500 ml-1">*</span>
-                                </Label>
-                                <FieldTooltip content="Data em que o exercício foi aberto" />
-                            </div>
-                            <Input
-                                id="dataAbertura"
-                                type="date"
-                                value={formData.dataAbertura}
-                                onChange={(e) =>
-                                    setFormData({
-                                        ...formData,
-                                        dataAbertura: e.target.value,
-                                    })
-                                }
-                                className={
-                                    erros.dataAbertura ? 'border-red-500' : ''
-                                }
-                            />
-                            {erros.dataAbertura && (
-                                <p className="text-sm text-red-500">
-                                    {erros.dataAbertura}
-                                </p>
-                            )}
-                        </div>
-
-                        {/* Data de Fechamento */}
-                        <div className="space-y-2">
-                            <div className="flex items-center gap-1">
-                                <Label htmlFor="dataFechamento">
-                                    Data de Fechamento
-                                </Label>
-                                <FieldTooltip content="Data em que o exercício foi encerrado (opcional)" />
-                            </div>
-                            <Input
-                                id="dataFechamento"
-                                type="date"
-                                value={formData.dataFechamento}
-                                onChange={(e) =>
-                                    setFormData({
-                                        ...formData,
-                                        dataFechamento: e.target.value,
-                                    })
-                                }
-                            />
-                        </div>
-
-                        {/* Status */}
-                        <div className="space-y-2">
-                            <div className="flex items-center gap-1">
-                                <Label htmlFor="status">Status</Label>
-                                <FieldTooltip content="Indica se o exercício está aberto ou fechado" />
-                            </div>
-                            <Select
-                                value={formData.ativo ? 'true' : 'false'}
-                                onValueChange={(valor) =>
-                                    setFormData({
-                                        ...formData,
-                                        ativo: valor === 'true',
-                                    })
-                                }
-                            >
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="true">Aberto</SelectItem>
-                                    <SelectItem value="false">
-                                        Fechado
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-
-                    <ActionBar
-                        onSalvar={salvar}
-                        onCancelar={() => setDialogAberto(false)}
-                        onLimpar={limpar}
-                        mode={editandoId ? 'edit' : 'create'}
-                    />
-                </DialogContent>
-            </Dialog>
         </div>
     );
 }

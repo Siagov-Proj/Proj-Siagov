@@ -1,16 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
 import {
     Table,
     TableBody,
@@ -20,10 +14,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ActionBar } from '@/components/ui/action-bar';
-import { FieldTooltip } from '@/components/ui/field-tooltip';
-import { Plus, Search, Pencil, Trash2, CreditCard } from 'lucide-react';
-import { maskCodigoComZeros } from '@/utils/masks';
+import { Plus, Search, Pencil, Trash2, CreditCard, ArrowLeft } from 'lucide-react';
 import type { IBanco } from '@/types';
 
 const bancosIniciais: IBanco[] = [
@@ -59,20 +50,10 @@ const bancosIniciais: IBanco[] = [
     },
 ];
 
-const formDataVazio = {
-    codigo: '',
-    nome: '',
-    nomeAbreviado: '',
-    cnpj: '',
-};
-
 export default function BancosPage() {
+    const router = useRouter();
     const [bancos, setBancos] = useState<IBanco[]>(bancosIniciais);
-    const [dialogAberto, setDialogAberto] = useState(false);
-    const [editandoId, setEditandoId] = useState<string | null>(null);
     const [termoBusca, setTermoBusca] = useState('');
-    const [formData, setFormData] = useState(formDataVazio);
-    const [erros, setErros] = useState<Record<string, string>>({});
 
     const bancosFiltrados = bancos.filter(
         (banco) =>
@@ -81,95 +62,41 @@ export default function BancosPage() {
             banco.codigo.includes(termoBusca)
     );
 
-    const abrirNovo = () => {
-        setFormData(formDataVazio);
-        setEditandoId(null);
-        setErros({});
-        setDialogAberto(true);
+    const handleNovo = () => {
+        router.push('/cadastros/bancos/novo');
     };
 
-    const editar = (banco: IBanco) => {
-        setFormData({
-            codigo: banco.codigo,
-            nome: banco.nome,
-            nomeAbreviado: banco.nomeAbreviado,
-            cnpj: banco.cnpj || '',
-        });
-        setEditandoId(banco.id);
-        setErros({});
-        setDialogAberto(true);
+    const handleEdit = (id: string) => {
+        router.push(`/cadastros/bancos/${id}`);
     };
 
-    const excluir = (id: string) => {
+    const handleDelete = (id: string) => {
         if (confirm('Tem certeza que deseja excluir este banco?')) {
             setBancos(bancos.filter((b) => b.id !== id));
         }
-    };
-
-    const limpar = () => {
-        setFormData(formDataVazio);
-        setErros({});
-    };
-
-    const validar = (): boolean => {
-        const novosErros: Record<string, string> = {};
-
-        if (!formData.codigo) novosErros.codigo = 'Código FEBRABAN é obrigatório';
-        if (!formData.nome) novosErros.nome = 'Nome é obrigatório';
-
-        // Verifica código duplicado
-        const codigoExistente = bancos.find(
-            (b) => b.codigo === formData.codigo && b.id !== editandoId
-        );
-        if (codigoExistente) {
-            novosErros.codigo = 'Este código já está cadastrado';
-        }
-
-        setErros(novosErros);
-        return Object.keys(novosErros).length === 0;
-    };
-
-    const salvar = () => {
-        if (!validar()) return;
-
-        if (editandoId) {
-            setBancos(
-                bancos.map((b) =>
-                    b.id === editandoId
-                        ? { ...b, ...formData, updatedAt: new Date() }
-                        : b
-                )
-            );
-        } else {
-            const novoBanco: IBanco = {
-                id: String(Date.now()),
-                ...formData,
-                ativo: true,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-            };
-            setBancos([...bancos, novoBanco]);
-        }
-
-        setDialogAberto(false);
-        setFormData(formDataVazio);
-        setEditandoId(null);
     };
 
     return (
         <div className="space-y-6">
             {/* Cabeçalho */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-                        <CreditCard className="h-6 w-6" />
-                        Rede Bancária
-                    </h1>
-                    <p className="text-muted-foreground">
-                        Cadastro de bancos para vinculação de agências e contas
-                    </p>
+                <div className="flex items-center gap-4">
+                    <Button variant="ghost" size="icon" asChild>
+                        <Link href="/cadastros">
+                            <ArrowLeft className="h-5 w-5" />
+                        </Link>
+                    </Button>
+                    <div>
+                        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+                            <CreditCard className="h-6 w-6" />
+                            Rede Bancária
+                        </h1>
+                        <p className="text-muted-foreground">
+                            Cadastro de bancos para vinculação de agências e contas
+                        </p>
+                    </div>
                 </div>
-                <Button onClick={abrirNovo}>
+                <Button onClick={handleNovo}>
                     <Plus className="mr-2 h-4 w-4" />
                     Novo Banco
                 </Button>
@@ -224,13 +151,17 @@ export default function BancosPage() {
                                             <TableCell className="text-sm font-mono">{banco.cnpj}</TableCell>
                                             <TableCell>
                                                 <div className="flex items-center justify-center gap-1">
-                                                    <Button variant="ghost" size="icon" onClick={() => editar(banco)}>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        onClick={() => handleEdit(banco.id)}
+                                                    >
                                                         <Pencil className="h-4 w-4" />
                                                     </Button>
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"
-                                                        onClick={() => excluir(banco.id)}
+                                                        onClick={() => handleDelete(banco.id)}
                                                         className="text-red-500 hover:text-red-600"
                                                     >
                                                         <Trash2 className="h-4 w-4" />
@@ -245,86 +176,6 @@ export default function BancosPage() {
                     </div>
                 </CardContent>
             </Card>
-
-            {/* Dialog de Formulário */}
-            <Dialog open={dialogAberto} onOpenChange={setDialogAberto}>
-                <DialogContent className="max-w-lg">
-                    <DialogHeader>
-                        <DialogTitle>
-                            {editandoId ? 'Editar Banco' : 'Novo Banco'}
-                        </DialogTitle>
-                        <DialogDescription>
-                            Preencha os dados do banco. O código segue o padrão FEBRABAN.
-                        </DialogDescription>
-                    </DialogHeader>
-
-                    <div className="grid gap-4 py-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <div className="flex items-center gap-1">
-                                    <Label htmlFor="codigo">
-                                        Código FEBRABAN<span className="text-red-500 ml-1">*</span>
-                                    </Label>
-                                    <FieldTooltip content="Código de 3 dígitos do banco conforme FEBRABAN" />
-                                </div>
-                                <Input
-                                    id="codigo"
-                                    value={formData.codigo}
-                                    onChange={(e) => setFormData({ ...formData, codigo: maskCodigoComZeros(e.target.value, 3) })}
-                                    maxLength={3}
-                                    placeholder="000"
-                                    className={erros.codigo ? 'border-red-500 font-mono' : 'font-mono'}
-                                />
-                                {erros.codigo && <p className="text-sm text-red-500">{erros.codigo}</p>}
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label htmlFor="nomeAbreviado">Sigla</Label>
-                                <Input
-                                    id="nomeAbreviado"
-                                    value={formData.nomeAbreviado}
-                                    onChange={(e) => setFormData({ ...formData, nomeAbreviado: e.target.value.toUpperCase() })}
-                                    maxLength={20} // Changed to 20 per requirement
-                                    placeholder="SIGLA"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label htmlFor="nome">
-                                Nome do Banco<span className="text-red-500 ml-1">*</span>
-                            </Label>
-                            <Input
-                                id="nome"
-                                value={formData.nome}
-                                onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                                maxLength={80}
-                                placeholder="Nome completo do banco"
-                                className={erros.nome ? 'border-red-500' : ''}
-                            />
-                            {erros.nome && <p className="text-sm text-red-500">{erros.nome}</p>}
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label htmlFor="cnpj">CNPJ</Label>
-                            <Input
-                                id="cnpj"
-                                value={formData.cnpj}
-                                onChange={(e) => setFormData({ ...formData, cnpj: e.target.value })}
-                                maxLength={18}
-                                placeholder="00.000.000/0001-91"
-                            />
-                        </div>
-                    </div>
-
-                    <ActionBar
-                        onSalvar={salvar}
-                        onCancelar={() => setDialogAberto(false)}
-                        onLimpar={limpar}
-                        mode={editandoId ? 'edit' : 'create'}
-                    />
-                </DialogContent>
-            </Dialog>
         </div>
     );
 }

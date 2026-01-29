@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
     Select,
     SelectContent,
@@ -29,14 +29,6 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
-import {
     ArrowLeft,
     Plus,
     Edit2,
@@ -47,7 +39,6 @@ import {
     ChevronRight,
     Scale,
 } from 'lucide-react';
-import { formatDate } from '@/utils/formatters';
 
 // Tipos
 interface ISubcategoria {
@@ -186,33 +177,12 @@ const categoriasIniciais: ICategoria[] = [
     },
 ];
 
-const formVazio = {
-    nome: '',
-    descricao: '',
-    lei: '',
-};
-
-const subFormVazio = {
-    nome: '',
-    descricao: '',
-    categoriaId: '',
-};
-
 export default function CategoriasDocumentosPage() {
+    const router = useRouter();
     const [categorias, setCategorias] = useState<ICategoria[]>(categoriasIniciais);
     const [termoBusca, setTermoBusca] = useState('');
     const [filtroLei, setFiltroLei] = useState('todas');
     const [expandidas, setExpandidas] = useState<string[]>(['1']);
-
-    // State do modal de categoria
-    const [modalCategoria, setModalCategoria] = useState(false);
-    const [formCategoria, setFormCategoria] = useState(formVazio);
-    const [editandoCategoriaId, setEditandoCategoriaId] = useState<string | null>(null);
-
-    // State do modal de subcategoria
-    const [modalSubcategoria, setModalSubcategoria] = useState(false);
-    const [formSubcategoria, setFormSubcategoria] = useState(subFormVazio);
-    const [editandoSubcategoriaId, setEditandoSubcategoriaId] = useState<string | null>(null);
 
     // Filtrar categorias
     const categoriasFiltradas = categorias.filter((cat) => {
@@ -229,107 +199,24 @@ export default function CategoriasDocumentosPage() {
         );
     };
 
-    // Handlers de Categoria
-    const abrirModalCategoria = (cat?: ICategoria) => {
-        if (cat) {
-            setFormCategoria({
-                nome: cat.nome,
-                descricao: cat.descricao,
-                lei: cat.lei,
-            });
-            setEditandoCategoriaId(cat.id);
-        } else {
-            setFormCategoria(formVazio);
-            setEditandoCategoriaId(null);
-        }
-        setModalCategoria(true);
+    const handleNovaCategoria = () => {
+        router.push('/cadastros/categorias-documentos/novo');
     };
 
-    const salvarCategoria = () => {
-        if (!formCategoria.nome.trim() || !formCategoria.lei) return;
+    const handleEditCategoria = (id: string) => {
+        router.push(`/cadastros/categorias-documentos/${id}`);
+    };
 
-        if (editandoCategoriaId) {
-            setCategorias((prev) =>
-                prev.map((cat) =>
-                    cat.id === editandoCategoriaId
-                        ? { ...cat, ...formCategoria }
-                        : cat
-                )
-            );
-        } else {
-            const novaCategoria: ICategoria = {
-                id: Date.now().toString(),
-                nome: formCategoria.nome,
-                descricao: formCategoria.descricao,
-                lei: formCategoria.lei,
-                cor: '#3b82f6',
-                ativo: true,
-                criadoEm: new Date(),
-                subcategorias: [],
-            };
-            setCategorias((prev) => [...prev, novaCategoria]);
-        }
-        setModalCategoria(false);
-        setFormCategoria(formVazio);
+    const handleNovaSubcategoria = (categoriaId: string) => {
+        router.push(`/cadastros/categorias-documentos/${categoriaId}/subcategoria/novo`);
+    };
+
+    const handleEditSubcategoria = (categoriaId: string, subcategoriaId: string) => {
+        router.push(`/cadastros/categorias-documentos/${categoriaId}/subcategoria/${subcategoriaId}`);
     };
 
     const excluirCategoria = (id: string) => {
         setCategorias((prev) => prev.filter((cat) => cat.id !== id));
-    };
-
-    // Handlers de Subcategoria
-    const abrirModalSubcategoria = (categoriaId: string, sub?: ISubcategoria) => {
-        if (sub) {
-            setFormSubcategoria({
-                nome: sub.nome,
-                descricao: sub.descricao,
-                categoriaId: sub.categoriaId,
-            });
-            setEditandoSubcategoriaId(sub.id);
-        } else {
-            setFormSubcategoria({ ...subFormVazio, categoriaId });
-            setEditandoSubcategoriaId(null);
-        }
-        setModalSubcategoria(true);
-    };
-
-    const salvarSubcategoria = () => {
-        if (!formSubcategoria.nome.trim() || !formSubcategoria.categoriaId) return;
-
-        if (editandoSubcategoriaId) {
-            setCategorias((prev) =>
-                prev.map((cat) =>
-                    cat.id === formSubcategoria.categoriaId
-                        ? {
-                            ...cat,
-                            subcategorias: cat.subcategorias.map((sub) =>
-                                sub.id === editandoSubcategoriaId
-                                    ? { ...sub, ...formSubcategoria }
-                                    : sub
-                            ),
-                        }
-                        : cat
-                )
-            );
-        } else {
-            const novaSubcategoria: ISubcategoria = {
-                id: Date.now().toString(),
-                nome: formSubcategoria.nome,
-                descricao: formSubcategoria.descricao,
-                categoriaId: formSubcategoria.categoriaId,
-                ativo: true,
-                criadoEm: new Date(),
-            };
-            setCategorias((prev) =>
-                prev.map((cat) =>
-                    cat.id === formSubcategoria.categoriaId
-                        ? { ...cat, subcategorias: [...cat.subcategorias, novaSubcategoria] }
-                        : cat
-                )
-            );
-        }
-        setModalSubcategoria(false);
-        setFormSubcategoria(subFormVazio);
     };
 
     const excluirSubcategoria = (categoriaId: string, subcategoriaId: string) => {
@@ -365,7 +252,7 @@ export default function CategoriasDocumentosPage() {
                         </p>
                     </div>
                 </div>
-                <Button onClick={() => abrirModalCategoria()}>
+                <Button onClick={handleNovaCategoria}>
                     <Plus className="mr-2 h-4 w-4" />
                     Nova Categoria
                 </Button>
@@ -455,7 +342,7 @@ export default function CategoriasDocumentosPage() {
                                                 <Button
                                                     variant="ghost"
                                                     size="icon"
-                                                    onClick={() => abrirModalCategoria(cat)}
+                                                    onClick={() => handleEditCategoria(cat.id)}
                                                 >
                                                     <Edit2 className="h-4 w-4" />
                                                 </Button>
@@ -479,7 +366,7 @@ export default function CategoriasDocumentosPage() {
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
-                                                    onClick={() => abrirModalSubcategoria(cat.id)}
+                                                    onClick={() => handleNovaSubcategoria(cat.id)}
                                                 >
                                                     <Plus className="mr-1 h-3 w-3" />
                                                     Adicionar
@@ -513,7 +400,7 @@ export default function CategoriasDocumentosPage() {
                                                                             variant="ghost"
                                                                             size="icon"
                                                                             onClick={() =>
-                                                                                abrirModalSubcategoria(cat.id, sub)
+                                                                                handleEditSubcategoria(cat.id, sub.id)
                                                                             }
                                                                         >
                                                                             <Edit2 className="h-3 w-3" />
@@ -543,117 +430,6 @@ export default function CategoriasDocumentosPage() {
                     </div>
                 </CardContent>
             </Card>
-
-            {/* Modal Categoria */}
-            <Dialog open={modalCategoria} onOpenChange={setModalCategoria}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>
-                            {editandoCategoriaId ? 'Editar Categoria' : 'Nova Categoria'}
-                        </DialogTitle>
-                        <DialogDescription>
-                            Preencha os dados da categoria de documentos
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="nomeCategoria">Nome</Label>
-                            <Input
-                                id="nomeCategoria"
-                                value={formCategoria.nome}
-                                onChange={(e) =>
-                                    setFormCategoria({ ...formCategoria, nome: e.target.value })
-                                }
-                                placeholder="Ex: Licitações"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="descricaoCategoria">Descrição</Label>
-                            <Input
-                                id="descricaoCategoria"
-                                value={formCategoria.descricao}
-                                onChange={(e) =>
-                                    setFormCategoria({ ...formCategoria, descricao: e.target.value })
-                                }
-                                placeholder="Descrição da categoria"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label>Lei Vinculada</Label>
-                            <Select
-                                value={formCategoria.lei}
-                                onValueChange={(valor) =>
-                                    setFormCategoria({ ...formCategoria, lei: valor })
-                                }
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Selecione a lei" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {LEIS.map((lei) => (
-                                        <SelectItem key={lei} value={lei}>
-                                            {lei}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setModalCategoria(false)}>
-                            Cancelar
-                        </Button>
-                        <Button onClick={salvarCategoria}>Salvar</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-            {/* Modal Subcategoria */}
-            <Dialog open={modalSubcategoria} onOpenChange={setModalSubcategoria}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>
-                            {editandoSubcategoriaId ? 'Editar Subcategoria' : 'Nova Subcategoria'}
-                        </DialogTitle>
-                        <DialogDescription>
-                            Preencha os dados da subcategoria
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="nomeSubcategoria">Nome</Label>
-                            <Input
-                                id="nomeSubcategoria"
-                                value={formSubcategoria.nome}
-                                onChange={(e) =>
-                                    setFormSubcategoria({ ...formSubcategoria, nome: e.target.value })
-                                }
-                                placeholder="Ex: Pregão Eletrônico"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="descricaoSubcategoria">Descrição</Label>
-                            <Input
-                                id="descricaoSubcategoria"
-                                value={formSubcategoria.descricao}
-                                onChange={(e) =>
-                                    setFormSubcategoria({
-                                        ...formSubcategoria,
-                                        descricao: e.target.value,
-                                    })
-                                }
-                                placeholder="Descrição da subcategoria"
-                            />
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setModalSubcategoria(false)}>
-                            Cancelar
-                        </Button>
-                        <Button onClick={salvarSubcategoria}>Salvar</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
         </div>
     );
 }

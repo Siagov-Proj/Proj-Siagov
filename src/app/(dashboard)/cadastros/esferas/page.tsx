@@ -1,11 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
     Card,
     CardContent,
@@ -23,14 +22,6 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
-import {
     ArrowLeft,
     Plus,
     Edit2,
@@ -38,138 +29,77 @@ import {
     Search,
     Globe,
     Building2,
+    Loader2,
 } from 'lucide-react';
-import { formatDate } from '@/utils/formatters';
+import { esferasService, IEsferaDB } from '@/services/api';
 
-// Tipos
-interface IEsfera {
-    id: string;
-    nome: string;
-    sigla: string;
-    descricao: string;
-    ativo: boolean;
+// Interface estendida para UI
+interface IEsferaUI extends IEsferaDB {
     instituicoesVinculadas: number;
-    criadoEm: Date;
 }
 
-// Dados mock
-const esferasIniciais: IEsfera[] = [
-    {
-        id: '1',
-        nome: 'Federal',
-        sigla: 'FED',
-        descricao: 'Órgãos e entidades da administração pública federal',
-        ativo: true,
-        instituicoesVinculadas: 12,
-        criadoEm: new Date('2024-01-01'),
-    },
-    {
-        id: '2',
-        nome: 'Estadual',
-        sigla: 'EST',
-        descricao: 'Órgãos e entidades da administração pública estadual',
-        ativo: true,
-        instituicoesVinculadas: 8,
-        criadoEm: new Date('2024-01-01'),
-    },
-    {
-        id: '3',
-        nome: 'Municipal',
-        sigla: 'MUN',
-        descricao: 'Órgãos e entidades da administração pública municipal',
-        ativo: true,
-        instituicoesVinculadas: 25,
-        criadoEm: new Date('2024-01-01'),
-    },
-    {
-        id: '4',
-        nome: 'Distrital',
-        sigla: 'DIS',
-        descricao: 'Órgãos e entidades do Distrito Federal',
-        ativo: true,
-        instituicoesVinculadas: 3,
-        criadoEm: new Date('2024-01-01'),
-    },
-];
-
-const formVazio = {
-    nome: '',
-    sigla: '',
-    descricao: '',
-};
-
 export default function EsferasPage() {
-    const [esferas, setEsferas] = useState<IEsfera[]>(esferasIniciais);
+    const router = useRouter();
+    const [esferas, setEsferas] = useState<IEsferaUI[]>([]);
     const [termoBusca, setTermoBusca] = useState('');
-    const [modalAberto, setModalAberto] = useState(false);
-    const [formData, setFormData] = useState(formVazio);
-    const [editandoId, setEditandoId] = useState<string | null>(null);
-    const [erros, setErros] = useState<Record<string, string>>({});
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-    // Filtrar esferas
-    const esferasFiltradas = esferas.filter(
-        (esf) =>
-            esf.nome.toLowerCase().includes(termoBusca.toLowerCase()) ||
-            esf.sigla.toLowerCase().includes(termoBusca.toLowerCase())
-    );
+    // Carregar esferas
+    const carregarEsferas = useCallback(async () => {
+        try {
+            setLoading(true);
+            setError(null);
+            const data = await esferasService.listar(termoBusca || undefined);
 
-    const abrirModal = (esfera?: IEsfera) => {
-        if (esfera) {
-            setFormData({
-                nome: esfera.nome,
-                sigla: esfera.sigla,
-                descricao: esfera.descricao,
-            });
-            setEditandoId(esfera.id);
-        } else {
-            setFormData(formVazio);
-            setEditandoId(null);
-        }
-        setErros({});
-        setModalAberto(true);
-    };
-
-    const validar = (): boolean => {
-        const novosErros: Record<string, string> = {};
-        if (!formData.nome.trim()) novosErros.nome = 'Nome é obrigatório';
-        if (!formData.sigla.trim()) novosErros.sigla = 'Sigla é obrigatória';
-        if (formData.sigla.length > 3) novosErros.sigla = 'Sigla deve ter no máximo 3 caracteres';
-        setErros(novosErros);
-        return Object.keys(novosErros).length === 0;
-    };
-
-    const salvar = () => {
-        if (!validar()) return;
-
-        if (editandoId) {
-            setEsferas((prev) =>
-                prev.map((esf) =>
-                    esf.id === editandoId ? { ...esf, ...formData } : esf
-                )
+            // Carregar contagem de instituições para cada esfera
+            const esferasComContagem = await Promise.all(
+                data.map(async (esf) => {
+                    const count = await esferasService.contarInstituicoes(esf.id);
+                    return { ...esf, instituicoesVinculadas: count };
+                })
             );
-        } else {
-            const novaEsfera: IEsfera = {
-                id: Date.now().toString(),
-                nome: formData.nome,
-                sigla: formData.sigla.toUpperCase(),
-                descricao: formData.descricao,
-                ativo: true,
-                instituicoesVinculadas: 0,
-                criadoEm: new Date(),
-            };
-            setEsferas((prev) => [...prev, novaEsfera]);
+
+            setEsferas(esferasComContagem);
+        } catch (err) {
+            console.error('Erro ao carregar esferas:', err);
+            setError('Erro ao carregar esferas. Tente novamente.');
+        } finally {
+            setLoading(false);
         }
-        setModalAberto(false);
-        setFormData(formVazio);
+    }, [termoBusca]);
+
+    useEffect(() => {
+        carregarEsferas();
+    }, [carregarEsferas]);
+
+    const handleNovo = () => {
+        router.push('/cadastros/esferas/novo');
     };
 
-    const excluir = (id: string) => {
+    const handleEdit = (id: string) => {
+        router.push(`/cadastros/esferas/${id}`);
+    };
+
+    const excluir = async (id: string) => {
         const esfera = esferas.find((e) => e.id === id);
         if (esfera && esfera.instituicoesVinculadas > 0) {
             alert('Não é possível excluir uma esfera com instituições vinculadas.');
             return;
         }
-        setEsferas((prev) => prev.filter((esf) => esf.id !== id));
+
+        if (!confirm('Tem certeza que deseja excluir esta esfera?')) {
+            return;
+        }
+
+        try {
+            await esferasService.excluir(id);
+            // Recarregar lista após exclusão
+            carregarEsferas();
+        } catch (err) {
+            console.error('Erro ao excluir esfera:', err);
+            alert('Erro ao excluir esfera. Tente novamente.');
+        }
     };
 
     const obterCorEsfera = (sigla: string) => {
@@ -207,7 +137,7 @@ export default function EsferasPage() {
                         </p>
                     </div>
                 </div>
-                <Button onClick={() => abrirModal()}>
+                <Button onClick={handleNovo}>
                     <Plus className="mr-2 h-4 w-4" />
                     Nova Esfera
                 </Button>
@@ -215,7 +145,7 @@ export default function EsferasPage() {
 
             {/* Cards de Resumo */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {esferasIniciais.map((esf) => (
+                {esferas.map((esf) => (
                     <Card key={esf.id}>
                         <CardContent className="pt-4">
                             <div className="flex items-center gap-3">
@@ -248,161 +178,105 @@ export default function EsferasPage() {
                 </CardContent>
             </Card>
 
+            {/* Error State */}
+            {error && (
+                <Card className="border-destructive">
+                    <CardContent className="pt-4">
+                        <p className="text-destructive">{error}</p>
+                        <Button variant="outline" onClick={carregarEsferas} className="mt-2">
+                            Tentar novamente
+                        </Button>
+                    </CardContent>
+                </Card>
+            )}
+
             {/* Tabela */}
             <Card>
                 <CardHeader>
                     <CardTitle>Esferas Cadastradas</CardTitle>
                     <CardDescription>
-                        {esferasFiltradas.length} esfera(s) encontrada(s)
+                        {loading ? 'Carregando...' : `${esferas.length} esfera(s) encontrada(s)`}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="rounded-md border">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-20">Sigla</TableHead>
-                                    <TableHead>Nome</TableHead>
-                                    <TableHead>Descrição</TableHead>
-                                    <TableHead className="w-32 text-center">Instituições</TableHead>
-                                    <TableHead className="w-24">Status</TableHead>
-                                    <TableHead className="w-24">Ações</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {esferasFiltradas.length === 0 ? (
+                    {loading ? (
+                        <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : (
+                        <div className="rounded-md border">
+                            <Table>
+                                <TableHeader>
                                     <TableRow>
-                                        <TableCell
-                                            colSpan={6}
-                                            className="text-center py-8 text-muted-foreground"
-                                        >
-                                            Nenhuma esfera encontrada
-                                        </TableCell>
+                                        <TableHead className="w-20">Sigla</TableHead>
+                                        <TableHead>Nome</TableHead>
+                                        <TableHead>Descrição</TableHead>
+                                        <TableHead className="w-32 text-center">Instituições</TableHead>
+                                        <TableHead className="w-24">Status</TableHead>
+                                        <TableHead className="w-24">Ações</TableHead>
                                     </TableRow>
-                                ) : (
-                                    esferasFiltradas.map((esf) => (
-                                        <TableRow key={esf.id}>
-                                            <TableCell>
-                                                <Badge className={obterCorEsfera(esf.sigla)}>
-                                                    {esf.sigla}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell className="font-medium">{esf.nome}</TableCell>
-                                            <TableCell className="text-sm text-muted-foreground max-w-xs truncate">
-                                                {esf.descricao}
-                                            </TableCell>
-                                            <TableCell className="text-center">
-                                                <div className="flex items-center justify-center gap-1">
-                                                    <Building2 className="h-4 w-4 text-muted-foreground" />
-                                                    <span>{esf.instituicoesVinculadas}</span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge variant={esf.ativo ? 'default' : 'secondary'}>
-                                                    {esf.ativo ? 'Ativo' : 'Inativo'}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center gap-1">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => abrirModal(esf)}
-                                                    >
-                                                        <Edit2 className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="text-destructive hover:text-destructive"
-                                                        onClick={() => excluir(esf.id)}
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
+                                </TableHeader>
+                                <TableBody>
+                                    {esferas.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell
+                                                colSpan={6}
+                                                className="text-center py-8 text-muted-foreground"
+                                            >
+                                                Nenhuma esfera encontrada
                                             </TableCell>
                                         </TableRow>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
+                                    ) : (
+                                        esferas.map((esf) => (
+                                            <TableRow key={esf.id}>
+                                                <TableCell>
+                                                    <Badge className={obterCorEsfera(esf.sigla)}>
+                                                        {esf.sigla}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="font-medium">{esf.nome}</TableCell>
+                                                <TableCell className="text-sm text-muted-foreground max-w-xs truncate">
+                                                    {esf.descricao}
+                                                </TableCell>
+                                                <TableCell className="text-center">
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        <Building2 className="h-4 w-4 text-muted-foreground" />
+                                                        <span>{esf.instituicoesVinculadas}</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant={esf.ativo ? 'default' : 'secondary'}>
+                                                        {esf.ativo ? 'Ativo' : 'Inativo'}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-1">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => handleEdit(esf.id)}
+                                                        >
+                                                            <Edit2 className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="text-destructive hover:text-destructive"
+                                                            onClick={() => excluir(esf.id)}
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
-
-            {/* Modal */}
-            <Dialog open={modalAberto} onOpenChange={setModalAberto}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>
-                            {editandoId ? 'Editar Esfera' : 'Nova Esfera'}
-                        </DialogTitle>
-                        <DialogDescription>
-                            Preencha os dados da esfera de governo
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                        <div className="grid grid-cols-3 gap-4">
-                            <div className="space-y-2 col-span-2">
-                                <Label htmlFor="nomeEsfera">
-                                    Nome<span className="text-red-500 ml-1">*</span>
-                                </Label>
-                                <Input
-                                    id="nomeEsfera"
-                                    value={formData.nome}
-                                    onChange={(e) =>
-                                        setFormData({ ...formData, nome: e.target.value })
-                                    }
-                                    placeholder="Ex: Federal"
-                                    className={erros.nome ? 'border-red-500' : ''}
-                                />
-                                {erros.nome && (
-                                    <p className="text-sm text-red-500">{erros.nome}</p>
-                                )}
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="siglaEsfera">
-                                    Sigla<span className="text-red-500 ml-1">*</span>
-                                </Label>
-                                <Input
-                                    id="siglaEsfera"
-                                    value={formData.sigla}
-                                    onChange={(e) =>
-                                        setFormData({
-                                            ...formData,
-                                            sigla: e.target.value.toUpperCase(),
-                                        })
-                                    }
-                                    maxLength={3}
-                                    placeholder="FED"
-                                    className={erros.sigla ? 'border-red-500' : ''}
-                                />
-                                {erros.sigla && (
-                                    <p className="text-sm text-red-500">{erros.sigla}</p>
-                                )}
-                            </div>
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="descricaoEsfera">Descrição</Label>
-                            <Textarea
-                                id="descricaoEsfera"
-                                value={formData.descricao}
-                                onChange={(e) =>
-                                    setFormData({ ...formData, descricao: e.target.value })
-                                }
-                                placeholder="Descrição da esfera..."
-                                rows={3}
-                            />
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setModalAberto(false)}>
-                            Cancelar
-                        </Button>
-                        <Button onClick={salvar}>Salvar</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
         </div>
     );
 }
