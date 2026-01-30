@@ -7,13 +7,16 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useThemeStore } from '@/hooks/useTheme';
+import { useAuthStore } from '@/hooks/useAuth';
 import { Moon, Sun, Eye, EyeOff, Loader2, Lock, CreditCard } from 'lucide-react';
 import Link from 'next/link';
 import { maskCpf } from '@/utils/masks';
 import { loginWithCpf } from '@/app/auth/actions';
 
 export default function LoginPage() {
+    const router = useRouter();
     const { isDark, toggleTheme } = useThemeStore();
+    const { login: syncStore } = useAuthStore();
 
     const [cpf, setCpf] = useState('');
     const [senha, setSenha] = useState('');
@@ -33,12 +36,24 @@ export default function LoginPage() {
 
         try {
             const result = await loginWithCpf(formData);
+
+            if (result?.success && result.user) {
+                // Sincroniza o estado do Zustand com os dados retornados
+                // O token 'authenticated' é apenas um placeholder pois o Supabase usa cookies
+                syncStore(result.user, 'authenticated');
+
+                // Redireciona via router do client
+                router.push('/dashboard');
+                return;
+            }
+
             if (result?.error) {
                 setError(result.error);
                 setIsLoading(false);
             }
         } catch (err) {
-            setError('Ocorreu um erro ao fazer login.');
+            console.error('Login action error:', err);
+            setError('Ocorreu um erro ao tentar fazer login.');
             setIsLoading(false);
         }
     };

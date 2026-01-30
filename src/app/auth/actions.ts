@@ -5,35 +5,48 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 
 export async function loginWithCpf(formData: FormData) {
-    const cpf = formData.get('cpf') as string;
+    const rawCpf = formData.get('cpf') as string;
     const password = formData.get('password') as string;
 
-    if (!cpf || !password) {
+    if (!rawCpf || !password) {
         return { error: 'CPF e senha são obrigatórios' };
     }
 
+    // Attempt to handle both unmasked (frontend) and masked (backend seed) formats.
+    // The previous error was due to frontend sending "12345678900" 
+    // but database having "123.456.789-00".
+
+    const cleanNumbers = rawCpf.replace(/\D/g, '');
+    const cpfMasked = cleanNumbers.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+
     const supabase = await createClient();
 
-    // 1. Lookup Email by CPF
-    // Note: This query requires permission to read 'usuarios' table.
-    // If RLS blocks this for unauthenticated users, this step fails.
-    // We assume 'usuarios' table allows reading by anyone OR we need a service bypass.
-    // For now, let's assume public.usuarios is readable or we are using a function.
-
-    // Ideally, use: supabase.rpc('get_email_by_cpf', { cpf_input: cpf })
-    // But let's try direct query first.
+    // 1. Lookup Email and User Data by CPF
+    // Use .maybeSingle() to gracefully handle "User Not Found" (PGRST116)
+    // We try querying with the MASKED CPF first, as that is the backend standard.
     const { data: userData, error: userError } = await supabase
         .from('usuarios')
-        .select('email_institucional')
-        .eq('cpf', cpf)
-        .single();
+        .select(`
+            id,
+            nome,
+            email:email_institucional,
+            cpf,
+            instituicaoId:instituicao_id,
+            orgaoId:orgao_id,
+            unidadeGestoraId:unidade_gestora_id,
+            setorId:setor_id,
+            cargoId:cargo_id,
+            permissoes
+        `)
+        .eq('cpf', cpfMasked)
+        .maybeSingle();
 
-    if (userError || !userData?.email_institucional) {
-        console.error('Login Lookup Error:', userError?.message);
+    if (userError || !userData?.email) {
+        console.error('Login Lookup Error:', userError?.message || 'No user found for CPF: ' + cpfMasked);
         return { error: 'Usuário não encontrado ou credenciais inválidas.' };
     }
 
-    const email = userData.email_institucional;
+    const email = userData.email;
 
     // 2. Sign In
     const { error: authError } = await supabase.auth.signInWithPassword({
@@ -43,10 +56,17 @@ export async function loginWithCpf(formData: FormData) {
 
     if (authError) {
         console.error('Login Auth Error:', authError.message);
-        return { error: 'Senha incorreta.' }; // Avoid specific messages if strict security needed, but convenient here.
+        if (authError.message === 'Email not confirmed') {
+            return { error: 'Email não confirmado. Por favor cheque sua caixa de entrada.' };
+        }
+        return { error: 'Senha incorreta.' };
     }
 
-    redirect('/dashboard');
+    // Return success and user data to sync client store
+    return {
+        success: true,
+        user: userData
+    };
 }
 
 export async function recoverPassword(formData: FormData) {
