@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,35 +15,22 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ActionBar } from '@/components/ui/action-bar';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
-import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { maskCpf } from '@/utils/masks';
 import { FIELD_LIMITS } from '@/utils/constants';
-
-// Mock para cascata
-const mockInstituicoes = [
-    { id: '1', nome: 'Ministério da Fazenda' },
-    { id: '2', nome: 'Ministério da Educação' },
-];
-
-const mockOrgaos = [
-    { id: '1', instituicaoId: '1', nome: 'Secretaria de Finanças' },
-    { id: '2', instituicaoId: '1', nome: 'Secretaria de Administração' },
-];
-
-const mockUnidadesGestoras = [
-    { id: '1', orgaoId: '1', nome: 'Coordenadoria de Orçamento' },
-    { id: '2', orgaoId: '2', nome: 'Coordenadoria de RH' },
-];
-
-const mockSetores = [
-    { id: '1', unidadeGestoraId: '1', nome: 'Setor de Licitações' },
-    { id: '2', unidadeGestoraId: '2', nome: 'Setor de Pessoal' },
-];
-
-const mockCargos = [
-    { id: '1', setorId: '1', nome: 'Analista de Licitações' },
-    { id: '2', setorId: '2', nome: 'Analista de RH' },
-];
+import {
+    usuariosService,
+    instituicoesService,
+    orgaosService,
+    unidadesService,
+    setoresService,
+    cargosService,
+    IInstituicaoDB,
+    IOrgaoDB,
+    IUnidadeGestoraDB,
+    ISetorDB,
+    ICargoDB
+} from '@/services/api';
 
 const PERFIS_USUARIO = [
     { value: 'admin', label: 'Administrador' },
@@ -79,20 +66,158 @@ export default function NovoUsuarioPage() {
     const [formData, setFormData] = useState(formDataVazio);
     const [erros, setErros] = useState<Record<string, string>>({});
     const [mostrarSenha, setMostrarSenha] = useState(false);
+    const [saving, setSaving] = useState(false);
 
-    // Cascata completa
-    const orgaosFiltrados = mockOrgaos.filter((o) => o.instituicaoId === formData.instituicaoId);
-    const ugsFiltradas = mockUnidadesGestoras.filter((ug) => ug.orgaoId === formData.orgaoId);
-    const setoresFiltrados = mockSetores.filter((s) => s.unidadeGestoraId === formData.unidadeGestoraId);
-    const cargosFiltrados = mockCargos.filter((c) => c.setorId === formData.setorId);
+    // Listas para selects
+    const [instituicoes, setInstituicoes] = useState<IInstituicaoDB[]>([]);
+    const [orgaos, setOrgaos] = useState<IOrgaoDB[]>([]);
+    const [unidades, setUnidades] = useState<IUnidadeGestoraDB[]>([]);
+    const [setores, setSetores] = useState<ISetorDB[]>([]);
+    const [cargos, setCargos] = useState<ICargoDB[]>([]);
+    const [unidadesOrigem, setUnidadesOrigem] = useState<IUnidadeGestoraDB[]>([]); // Para UG Origem, carregamos todas ou filtramos? 
+    // Assumindo que UG Origem pode ser qualquer uma, vamos carregar todas quando necessário ou usar a mesma lista se for o caso.
+    // O mock usava a mesma lista filtrada? Não, usava mockUnidadesGestoras.
+    // Vamos carregar todas as unidades para UG Origem no início, ou filtrar por instituição?
+    // Geralmente UG Origem é uma lista geral. O serviço unidadesService.listar() pode ser pesado se tiver muitas.
+    // Vamos carregar lista vazia e popular se precisar, ou carregar junto com instituicoes.
+
+    // Loading states
+    const [loadingInstituicoes, setLoadingInstituicoes] = useState(true);
+    const [loadingOrgaos, setLoadingOrgaos] = useState(false);
+    const [loadingUnidades, setLoadingUnidades] = useState(false);
+    const [loadingSetores, setLoadingSetores] = useState(false);
+    const [loadingCargos, setLoadingCargos] = useState(false);
+
+    useEffect(() => {
+        const carregarDadosIniciais = async () => {
+            try {
+                const [listaInstituicoes, listaUnidades] = await Promise.all([
+                    instituicoesService.listar(),
+                    unidadesService.listar() // Para UG Origem
+                ]);
+                setInstituicoes(listaInstituicoes);
+                setUnidadesOrigem(listaUnidades);
+            } catch (err) {
+                console.error('Erro ao carregar dados iniciais:', err);
+            } finally {
+                setLoadingInstituicoes(false);
+            }
+        };
+        carregarDadosIniciais();
+    }, []);
+
+    const handleInstituicaoChange = async (instituicaoId: string) => {
+        setFormData({
+            ...formData,
+            instituicaoId,
+            orgaoId: '',
+            unidadeGestoraId: '',
+            setorId: '',
+            cargoId: ''
+        });
+        setOrgaos([]);
+        setUnidades([]);
+        setSetores([]);
+        setCargos([]);
+
+        if (instituicaoId) {
+            try {
+                setLoadingOrgaos(true);
+                const data = await orgaosService.listarPorInstituicao(instituicaoId);
+                setOrgaos(data);
+            } catch (err) {
+                console.error('Erro ao carregar órgãos:', err);
+            } finally {
+                setLoadingOrgaos(false);
+            }
+        }
+    };
+
+    const handleOrgaoChange = async (orgaoId: string) => {
+        setFormData({
+            ...formData,
+            orgaoId,
+            unidadeGestoraId: '',
+            setorId: '',
+            cargoId: ''
+        });
+        setUnidades([]);
+        setSetores([]);
+        setCargos([]);
+
+        if (orgaoId) {
+            try {
+                setLoadingUnidades(true);
+                const data = await unidadesService.listarPorOrgao(orgaoId);
+                setUnidades(data);
+            } catch (err) {
+                console.error('Erro ao carregar unidades:', err);
+            } finally {
+                setLoadingUnidades(false);
+            }
+        }
+    };
+
+    const handleUnidadeChange = async (unidadeGestoraId: string) => {
+        setFormData({
+            ...formData,
+            unidadeGestoraId,
+            setorId: '',
+            cargoId: ''
+        });
+        setSetores([]);
+        setCargos([]);
+
+        if (unidadeGestoraId) {
+            try {
+                setLoadingSetores(true);
+                const data = await setoresService.listarPorUnidadeGestora(unidadeGestoraId);
+                setSetores(data);
+            } catch (err) {
+                console.error('Erro ao carregar setores:', err);
+            } finally {
+                setLoadingSetores(false);
+            }
+        }
+    };
+
+    const handleSetorChange = async (setorId: string) => {
+        setFormData({
+            ...formData,
+            setorId,
+            cargoId: ''
+        });
+        setCargos([]);
+
+        if (setorId) {
+            try {
+                setLoadingCargos(true);
+                const data = await cargosService.listarPorSetor(setorId);
+                setCargos(data);
+            } catch (err) {
+                console.error('Erro ao carregar cargos:', err);
+            } finally {
+                setLoadingCargos(false);
+            }
+        }
+    };
 
     const validar = (): boolean => {
         const novosErros: Record<string, string> = {};
 
+        if (!formData.codigo) novosErros.codigo = 'Código é obrigatório';
         if (!formData.nome) novosErros.nome = 'Nome é obrigatório';
         if (!formData.cpf) novosErros.cpf = 'CPF é obrigatório';
+        if (formData.cpf && formData.cpf.length < 14) novosErros.cpf = 'CPF incompleto';
         if (!formData.emailInstitucional) novosErros.emailInstitucional = 'E-mail Institucional é obrigatório';
         if (!formData.instituicaoId) novosErros.instituicaoId = 'Instituição é obrigatória';
+        if (!formData.orgaoId) novosErros.orgaoId = 'Órgão é obrigatório';
+        if (!formData.unidadeGestoraId) novosErros.unidadeGestoraId = 'Unidade Gestora é obrigatória';
+        if (!formData.setorId) novosErros.setorId = 'Setor é obrigatório';
+
+        // Validação de senha condicional? Não, é create, obrigatório se fosse auth.
+        // Como o serviço não aceita senha, vamos apenas validar mas não enviar (simulando que seria usado)
+        // Ou removendo a obrigatoriedade se não for usado. Mantendo como obrigatório por consistência visual.
         if (!formData.senha) novosErros.senha = 'Senha é obrigatória';
         else if (formData.senha.length < 8) novosErros.senha = 'Senha deve ter no mínimo 8 caracteres';
         if (formData.senha !== formData.confirmarSenha) {
@@ -103,10 +228,38 @@ export default function NovoUsuarioPage() {
         return Object.keys(novosErros).length === 0;
     };
 
-    const handleSalvar = () => {
+    const handleSalvar = async () => {
         if (!validar()) return;
-        console.log('Salvando novo usuário:', formData);
-        router.push('/cadastros/usuarios');
+
+        try {
+            setSaving(true);
+            await usuariosService.criar({
+                codigo: formData.codigo,
+                nome: formData.nome,
+                cpf: formData.cpf.replace(/\D/g, ''),
+                nome_credor: formData.nomeCredor,
+                matricula: formData.matricula,
+                vinculo: formData.vinculo,
+                email_institucional: formData.emailInstitucional,
+                email_pessoal: formData.emailPessoal,
+                telefone_01: formData.telefone01,
+                telefone_whatsapp: formData.telefoneWhatsApp,
+                instituicao_id: formData.instituicaoId,
+                orgao_id: formData.orgaoId,
+                unidade_gestora_id: formData.unidadeGestoraId,
+                ug_origem_id: formData.ugOrigem,
+                setor_id: formData.setorId,
+                cargo_id: formData.cargoId || undefined, // Opcional no form? IUsuarioDB tem cargo_id? Sim, opcional.
+                permissoes: [formData.perfilAcesso].filter(Boolean), // Array de strings
+                ativo: true,
+            });
+            router.push('/cadastros/usuarios');
+        } catch (err) {
+            console.error('Erro ao criar usuário:', err);
+            alert('Erro ao criar usuário. Verifique se o CPF já existe.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleCancelar = () => {
@@ -116,6 +269,11 @@ export default function NovoUsuarioPage() {
     const handleLimpar = () => {
         setFormData(formDataVazio);
         setErros({});
+        // Limpar cascatas
+        setOrgaos([]);
+        setUnidades([]);
+        setSetores([]);
+        setCargos([]);
     };
 
     return (
@@ -140,7 +298,20 @@ export default function NovoUsuarioPage() {
                 <CardContent>
                     <div className="grid gap-4">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-2 sm:col-span-2">
+                            <div className="space-y-2">
+                                <Label htmlFor="codigo">Código<span className="text-red-500 ml-1">*</span></Label>
+                                <Input
+                                    id="codigo"
+                                    value={formData.codigo}
+                                    onChange={(e) => setFormData({ ...formData, codigo: e.target.value.substring(0, 10) })}
+                                    maxLength={10}
+                                    placeholder="Código"
+                                    className={`font-mono w-full ${erros.codigo ? 'border-red-500' : ''}`}
+                                />
+                                {erros.codigo && <p className="text-sm text-red-500">{erros.codigo}</p>}
+                            </div>
+
+                            <div className="space-y-2 sm:col-span-1">
                                 <Label htmlFor="nome">
                                     Nome Completo<span className="text-red-500 ml-1">*</span>
                                 </Label>
@@ -164,11 +335,11 @@ export default function NovoUsuarioPage() {
                                     value={formData.cpf}
                                     onChange={(e) => {
                                         const novoCpf = maskCpf(e.target.value);
-                                        const nomeCredorMock = novoCpf.length === 14 ? 'Credor Exemplo Mock' : '';
+                                        const nomeCredorMock = novoCpf.length === 14 ? formData.nome : ''; // Usar o nome digitado como sugestão
                                         setFormData({
                                             ...formData,
                                             cpf: novoCpf,
-                                            nomeCredor: nomeCredorMock
+                                            nomeCredor: formData.nomeCredor || nomeCredorMock
                                         });
                                     }}
                                     maxLength={14}
@@ -183,9 +354,8 @@ export default function NovoUsuarioPage() {
                                 <Input
                                     id="nomeCredor"
                                     value={formData.nomeCredor}
-                                    readOnly
-                                    className="bg-muted"
-                                    placeholder="Preenchido automaticamente..."
+                                    onChange={(e) => setFormData({ ...formData, nomeCredor: e.target.value })}
+                                    placeholder="Preenchido automaticamente ou digite"
                                 />
                             </div>
 
@@ -289,21 +459,14 @@ export default function NovoUsuarioPage() {
                             <Label>Instituição<span className="text-red-500 ml-1">*</span></Label>
                             <Select
                                 value={formData.instituicaoId}
-                                onValueChange={(valor) => setFormData({
-                                    ...formData,
-                                    instituicaoId: valor,
-                                    orgaoId: '',
-                                    unidadeGestoraId: '',
-                                    setorId: '',
-                                    cargoId: ''
-                                })}
+                                onValueChange={handleInstituicaoChange}
                             >
                                 <SelectTrigger className={erros.instituicaoId ? 'border-red-500' : ''}>
-                                    <SelectValue placeholder="Selecione" />
+                                    <SelectValue placeholder={loadingInstituicoes ? "Carregando..." : "Selecione"} />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {mockInstituicoes.map((inst) => (
-                                        <SelectItem key={inst.id} value={inst.id}>{inst.nome}</SelectItem>
+                                    {instituicoes.map((inst) => (
+                                        <SelectItem key={inst.id} value={inst.id}>{inst.codigo} - {inst.nome}</SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
@@ -311,50 +474,55 @@ export default function NovoUsuarioPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <Label>Órgão</Label>
-                            <Select
-                                value={formData.orgaoId}
-                                onValueChange={(valor) => setFormData({
-                                    ...formData,
-                                    orgaoId: valor,
-                                    unidadeGestoraId: '',
-                                    setorId: '',
-                                    cargoId: ''
-                                })}
-                                disabled={!formData.instituicaoId}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {orgaosFiltrados.map((org) => (
-                                        <SelectItem key={org.id} value={org.id}>{org.nome}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <Label>Órgão<span className="text-red-500 ml-1">*</span></Label>
+                            {loadingOrgaos ? (
+                                <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted">
+                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                    <span className="text-sm text-muted-foreground">Carregando...</span>
+                                </div>
+                            ) : (
+                                <Select
+                                    value={formData.orgaoId}
+                                    onValueChange={handleOrgaoChange}
+                                    disabled={!formData.instituicaoId}
+                                >
+                                    <SelectTrigger className={erros.orgaoId ? 'border-red-500' : ''}>
+                                        <SelectValue placeholder={formData.instituicaoId ? "Selecione" : "Aguardando..."} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {orgaos.map((org) => (
+                                            <SelectItem key={org.id} value={org.id}>{org.codigo} - {org.nome}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
+                            {erros.orgaoId && <p className="text-sm text-red-500">{erros.orgaoId}</p>}
                         </div>
 
                         <div className="space-y-2">
-                            <Label>Unidade Gestora</Label>
-                            <Select
-                                value={formData.unidadeGestoraId}
-                                onValueChange={(valor) => setFormData({
-                                    ...formData,
-                                    unidadeGestoraId: valor,
-                                    setorId: '',
-                                    cargoId: ''
-                                })}
-                                disabled={!formData.orgaoId}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {ugsFiltradas.map((ug) => (
-                                        <SelectItem key={ug.id} value={ug.id}>{ug.nome}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <Label>Unidade Gestora<span className="text-red-500 ml-1">*</span></Label>
+                            {loadingUnidades ? (
+                                <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted">
+                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                    <span className="text-sm text-muted-foreground">Carregando...</span>
+                                </div>
+                            ) : (
+                                <Select
+                                    value={formData.unidadeGestoraId}
+                                    onValueChange={handleUnidadeChange}
+                                    disabled={!formData.orgaoId}
+                                >
+                                    <SelectTrigger className={erros.unidadeGestoraId ? 'border-red-500' : ''}>
+                                        <SelectValue placeholder={formData.orgaoId ? "Selecione" : "Aguardando..."} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {unidades.map((ug) => (
+                                            <SelectItem key={ug.id} value={ug.id}>{ug.codigo} - {ug.nome}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
+                            {erros.unidadeGestoraId && <p className="text-sm text-red-500">{erros.unidadeGestoraId}</p>}
                         </div>
 
                         <div className="space-y-2">
@@ -367,47 +535,62 @@ export default function NovoUsuarioPage() {
                                     <SelectValue placeholder="Selecione" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {mockUnidadesGestoras.map((ug) => (
-                                        <SelectItem key={ug.id} value={ug.id}>{ug.nome}</SelectItem>
+                                    {unidadesOrigem.map((ug) => (
+                                        <SelectItem key={ug.id} value={ug.id}>{ug.codigo} - {ug.nome}</SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
                         </div>
 
                         <div className="space-y-2">
-                            <Label>Setor</Label>
-                            <Select
-                                value={formData.setorId}
-                                onValueChange={(valor) => setFormData({ ...formData, setorId: valor, cargoId: '' })}
-                                disabled={!formData.unidadeGestoraId}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {setoresFiltrados.map((setor) => (
-                                        <SelectItem key={setor.id} value={setor.id}>{setor.nome}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <Label>Setor<span className="text-red-500 ml-1">*</span></Label>
+                            {loadingSetores ? (
+                                <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted">
+                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                    <span className="text-sm text-muted-foreground">Carregando...</span>
+                                </div>
+                            ) : (
+                                <Select
+                                    value={formData.setorId}
+                                    onValueChange={handleSetorChange}
+                                    disabled={!formData.unidadeGestoraId}
+                                >
+                                    <SelectTrigger className={erros.setorId ? 'border-red-500' : ''}>
+                                        <SelectValue placeholder={formData.unidadeGestoraId ? "Selecione" : "Aguardando..."} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {setores.map((setor) => (
+                                            <SelectItem key={setor.id} value={setor.id}>{setor.codigo} - {setor.nome}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
+                            {erros.setorId && <p className="text-sm text-red-500">{erros.setorId}</p>}
                         </div>
 
                         <div className="space-y-2">
                             <Label>Cargo</Label>
-                            <Select
-                                value={formData.cargoId}
-                                onValueChange={(valor) => setFormData({ ...formData, cargoId: valor })}
-                                disabled={!formData.setorId}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {cargosFiltrados.map((cargo) => (
-                                        <SelectItem key={cargo.id} value={cargo.id}>{cargo.nome}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            {loadingCargos ? (
+                                <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted">
+                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                    <span className="text-sm text-muted-foreground">Carregando...</span>
+                                </div>
+                            ) : (
+                                <Select
+                                    value={formData.cargoId}
+                                    onValueChange={(valor) => setFormData({ ...formData, cargoId: valor })}
+                                    disabled={!formData.setorId}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder={formData.setorId ? "Selecione" : "Aguardando..."} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {cargos.map((cargo) => (
+                                            <SelectItem key={cargo.id} value={cargo.id}>{cargo.nome}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
                         </div>
 
                         <div className="space-y-2">
@@ -432,7 +615,7 @@ export default function NovoUsuarioPage() {
 
             <Card>
                 <CardHeader>
-                    <CardTitle>Senha de Acesso</CardTitle>
+                    <CardTitle>Senha de Acesso (Demo)</CardTitle>
                 </CardHeader>
                 <CardContent>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -485,6 +668,7 @@ export default function NovoUsuarioPage() {
                 onCancelar={handleCancelar}
                 onLimpar={handleLimpar}
                 mode="create"
+                isLoading={saving}
             />
         </div>
     );

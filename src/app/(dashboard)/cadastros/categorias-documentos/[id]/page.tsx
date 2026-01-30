@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,50 +14,14 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ActionBar } from '@/components/ui/action-bar';
-import { ArrowLeft, FolderOpen } from 'lucide-react';
+import { ArrowLeft, FolderOpen, Loader2 } from 'lucide-react';
+import { categoriasDocService } from '@/services/api';
 
 const LEIS = [
     'Lei 14.133/2021',
     'Lei 8.666/93',
     'Lei 13.019/14',
     'Lei 10.520/02',
-];
-
-// Mock data
-interface ICategoria {
-    id: string;
-    nome: string;
-    descricao: string;
-    lei: string;
-    cor: string;
-    ativo: boolean;
-}
-
-const categoriasMock: ICategoria[] = [
-    {
-        id: '1',
-        nome: 'Licitações',
-        descricao: 'Documentos relacionados a processos licitatórios',
-        lei: 'Lei 14.133/2021',
-        cor: '#3b82f6',
-        ativo: true,
-    },
-    {
-        id: '2',
-        nome: 'Contratos',
-        descricao: 'Documentos contratuais e aditivos',
-        lei: 'Lei 8.666/93',
-        cor: '#10b981',
-        ativo: true,
-    },
-    {
-        id: '3',
-        nome: 'Recursos Humanos',
-        descricao: 'Documentos de pessoal e RH',
-        lei: 'Lei 13.019/14',
-        cor: '#f59e0b',
-        ativo: true,
-    },
 ];
 
 const formVazio = {
@@ -73,22 +37,38 @@ export default function EditarCategoriaPage() {
     const [originalData, setOriginalData] = useState(formVazio);
     const [erros, setErros] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+
+    const carregarCategoria = useCallback(async () => {
+        try {
+            setLoading(true);
+            const id = params.id as string;
+            const categoria = await categoriasDocService.buscarCategoriaPorId(id);
+
+            if (categoria) {
+                const data = {
+                    nome: categoria.nome,
+                    descricao: categoria.descricao || '',
+                    lei: categoria.lei || '',
+                };
+                setFormData(data);
+                setOriginalData(data);
+            } else {
+                alert('Categoria não encontrada');
+                router.push('/cadastros/categorias-documentos');
+            }
+        } catch (err) {
+            console.error('Erro ao carregar categoria:', err);
+            alert('Erro ao carregar categoria. Tente novamente.');
+            router.push('/cadastros/categorias-documentos');
+        } finally {
+            setLoading(false);
+        }
+    }, [params.id, router]);
 
     useEffect(() => {
-        const id = params.id as string;
-        const found = categoriasMock.find((c) => c.id === id);
-
-        if (found) {
-            const data = {
-                nome: found.nome,
-                descricao: found.descricao,
-                lei: found.lei,
-            };
-            setFormData(data);
-            setOriginalData(data);
-        }
-        setLoading(false);
-    }, [params.id]);
+        carregarCategoria();
+    }, [carregarCategoria]);
 
     const validar = (): boolean => {
         const novosErros: Record<string, string> = {};
@@ -98,10 +78,23 @@ export default function EditarCategoriaPage() {
         return Object.keys(novosErros).length === 0;
     };
 
-    const handleSalvar = () => {
+    const handleSalvar = async () => {
         if (!validar()) return;
-        console.log('Atualizando categoria:', params.id, formData);
-        router.push('/cadastros/categorias-documentos');
+
+        try {
+            setSaving(true);
+            await categoriasDocService.atualizarCategoria(params.id as string, {
+                nome: formData.nome,
+                descricao: formData.descricao,
+                lei: formData.lei,
+            });
+            router.push('/cadastros/categorias-documentos');
+        } catch (err) {
+            console.error('Erro ao atualizar categoria:', err);
+            alert('Erro ao atualizar categoria. Tente novamente.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleCancelar = () => {
@@ -113,7 +106,13 @@ export default function EditarCategoriaPage() {
         setErros({});
     };
 
-    if (loading) return <div>Carregando...</div>;
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -191,7 +190,9 @@ export default function EditarCategoriaPage() {
                 onCancelar={handleCancelar}
                 onLimpar={handleLimpar}
                 mode="edit"
+                isLoading={saving}
             />
         </div>
     );
 }
+

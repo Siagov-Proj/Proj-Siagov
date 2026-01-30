@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,41 +15,11 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ActionBar } from '@/components/ui/action-bar';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
-import { ArrowLeft, Calendar, AlertTriangle } from 'lucide-react';
-import type { IExercicioFinanceiro } from '@/types';
+import { ArrowLeft, Calendar, AlertTriangle, Loader2 } from 'lucide-react';
+import { exerciciosService, instituicoesService, IInstituicaoDB } from '@/services/api';
 
 // Ano corrente
 const ANO_CORRENTE = new Date().getFullYear();
-
-// Mock de instituições
-const mockInstituicoes = [
-    { id: '1', nome: 'Prefeitura Municipal de São Paulo' },
-    { id: '2', nome: 'Governo do Estado de São Paulo' },
-];
-
-// Dados mock
-const exerciciosMock: IExercicioFinanceiro[] = [
-    {
-        id: '1',
-        ano: 2024,
-        instituicaoId: '1',
-        dataAbertura: new Date('2024-01-02'),
-        dataFechamento: undefined,
-        ativo: true,
-        createdAt: new Date('2024-01-02'),
-        updatedAt: new Date('2024-01-02'),
-    },
-    {
-        id: '2',
-        ano: 2023,
-        instituicaoId: '1',
-        dataAbertura: new Date('2023-01-02'),
-        dataFechamento: new Date('2023-12-31'),
-        ativo: false,
-        createdAt: new Date('2023-01-02'),
-        updatedAt: new Date('2023-12-31'),
-    },
-];
 
 const formDataVazio = {
     ano: ANO_CORRENTE,
@@ -67,29 +37,52 @@ export default function EditarExercicioPage() {
     const [erros, setErros] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
     const [bloqueado, setBloqueado] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [instituicoes, setInstituicoes] = useState<IInstituicaoDB[]>([]);
+
+    const carregarDados = useCallback(async () => {
+        try {
+            setLoading(true);
+            const id = params.id as string;
+
+            const [exercicio, listaInstituicoes] = await Promise.all([
+                exerciciosService.buscarPorId(id),
+                instituicoesService.listar()
+            ]);
+
+            setInstituicoes(listaInstituicoes);
+
+            if (exercicio) {
+                const data = {
+                    ano: exercicio.ano,
+                    instituicaoId: exercicio.instituicao_id || '',
+                    dataAbertura: exercicio.data_abertura
+                        ? new Date(exercicio.data_abertura).toISOString().split('T')[0]
+                        : '',
+                    dataFechamento: exercicio.data_fechamento
+                        ? new Date(exercicio.data_fechamento).toISOString().split('T')[0]
+                        : '',
+                    ativo: exercicio.ativo,
+                };
+                setFormData(data);
+                setOriginalData(data);
+                setBloqueado(exercicio.ano < ANO_CORRENTE);
+            } else {
+                alert('Exercício não encontrado');
+                router.push('/cadastros/exercicios');
+            }
+        } catch (error) {
+            console.error('Erro ao carregar dados:', error);
+            alert('Erro ao carregar dados do exercício. Tente novamente.');
+            router.push('/cadastros/exercicios');
+        } finally {
+            setLoading(false);
+        }
+    }, [params.id, router]);
 
     useEffect(() => {
-        const id = params.id as string;
-        const found = exerciciosMock.find((e) => e.id === id);
-
-        if (found) {
-            const data = {
-                ano: found.ano,
-                instituicaoId: found.instituicaoId,
-                dataAbertura: found.dataAbertura
-                    ? new Date(found.dataAbertura).toISOString().split('T')[0]
-                    : '',
-                dataFechamento: found.dataFechamento
-                    ? new Date(found.dataFechamento).toISOString().split('T')[0]
-                    : '',
-                ativo: found.ativo,
-            };
-            setFormData(data);
-            setOriginalData(data);
-            setBloqueado(found.ano < ANO_CORRENTE);
-        }
-        setLoading(false);
-    }, [params.id]);
+        carregarDados();
+    }, [carregarDados]);
 
     const validar = (): boolean => {
         const novosErros: Record<string, string> = {};
@@ -110,10 +103,25 @@ export default function EditarExercicioPage() {
         return Object.keys(novosErros).length === 0;
     };
 
-    const handleSalvar = () => {
+    const handleSalvar = async () => {
         if (!validar()) return;
-        console.log('Atualizando exercício:', params.id, formData);
-        router.push('/cadastros/exercicios');
+
+        try {
+            setSaving(true);
+            await exerciciosService.atualizar(params.id as string, {
+                ano: formData.ano,
+                instituicao_id: formData.instituicaoId,
+                data_abertura: formData.dataAbertura,
+                data_fechamento: formData.dataFechamento || undefined,
+                ativo: formData.ativo,
+            });
+            router.push('/cadastros/exercicios');
+        } catch (error) {
+            console.error('Erro ao atualizar exercício:', error);
+            alert('Erro ao atualizar exercício. Tente novamente.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleCancelar = () => {
@@ -125,7 +133,13 @@ export default function EditarExercicioPage() {
         setErros({});
     };
 
-    if (loading) return <div>Carregando...</div>;
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -197,9 +211,9 @@ export default function EditarExercicioPage() {
                                         <SelectValue placeholder="Selecione a instituição" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {mockInstituicoes.map((inst) => (
+                                        {instituicoes.map((inst) => (
                                             <SelectItem key={inst.id} value={inst.id}>
-                                                {inst.nome}
+                                                {inst.codigo} - {inst.nome}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
@@ -268,6 +282,7 @@ export default function EditarExercicioPage() {
                 onCancelar={handleCancelar}
                 onLimpar={handleLimpar}
                 mode="edit"
+                isLoading={saving}
             />
         </div>
     );

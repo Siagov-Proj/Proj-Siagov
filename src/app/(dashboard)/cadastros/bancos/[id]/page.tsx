@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,42 +10,8 @@ import { ActionBar } from '@/components/ui/action-bar';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { maskCodigoComZeros, maskCnpj } from '@/utils/masks';
 import { FIELD_LIMITS } from '@/utils/constants';
-import type { IBanco } from '@/types';
-import { ArrowLeft } from 'lucide-react';
-
-// Mock data
-const mockBancos: IBanco[] = [
-    {
-        id: '1',
-        codigo: '001',
-        nome: 'Banco do Brasil S.A.',
-        nomeAbreviado: 'BB',
-        cnpj: '00.000.000/0001-91',
-        ativo: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-    },
-    {
-        id: '2',
-        codigo: '104',
-        nome: 'Caixa Econômica Federal',
-        nomeAbreviado: 'CEF',
-        cnpj: '00.360.305/0001-04',
-        ativo: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-    },
-    {
-        id: '3',
-        codigo: '341',
-        nome: 'Itaú Unibanco S.A.',
-        nomeAbreviado: 'ITAU',
-        cnpj: '60.701.190/0001-04',
-        ativo: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-    },
-];
+import { ArrowLeft, Loader2 } from 'lucide-react';
+import { bancosService } from '@/services/api';
 
 const emptyFormData = {
     codigo: '',
@@ -61,23 +27,39 @@ export default function EditarBancoPage() {
     const [originalData, setOriginalData] = useState(emptyFormData);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+
+    const carregarBanco = useCallback(async () => {
+        try {
+            setLoading(true);
+            const id = params.id as string;
+            const banco = await bancosService.buscarPorId(id);
+
+            if (banco) {
+                const data = {
+                    codigo: banco.codigo,
+                    nome: banco.nome,
+                    nomeAbreviado: banco.nome_abreviado || '',
+                    cnpj: banco.cnpj || '',
+                };
+                setFormData(data);
+                setOriginalData(data);
+            } else {
+                alert('Banco não encontrado');
+                router.push('/cadastros/bancos');
+            }
+        } catch (err) {
+            console.error('Erro ao carregar banco:', err);
+            alert('Erro ao carregar banco. Tente novamente.');
+            router.push('/cadastros/bancos');
+        } finally {
+            setLoading(false);
+        }
+    }, [params.id, router]);
 
     useEffect(() => {
-        const id = params.id as string;
-        const found = mockBancos.find(b => b.id === id);
-
-        if (found) {
-            const data = {
-                codigo: found.codigo,
-                nome: found.nome,
-                nomeAbreviado: found.nomeAbreviado,
-                cnpj: found.cnpj || '',
-            };
-            setFormData(data);
-            setOriginalData(data);
-        }
-        setLoading(false);
-    }, [params.id]);
+        carregarBanco();
+    }, [carregarBanco]);
 
     const validate = (): boolean => {
         const newErrors: Record<string, string> = {};
@@ -89,10 +71,24 @@ export default function EditarBancoPage() {
         return Object.keys(newErrors).length === 0;
     };
 
-    const handleSalvar = () => {
+    const handleSalvar = async () => {
         if (!validate()) return;
-        console.log('Atualizando banco:', params.id, formData);
-        router.push('/cadastros/bancos');
+
+        try {
+            setSaving(true);
+            await bancosService.atualizar(params.id as string, {
+                codigo: formData.codigo,
+                nome: formData.nome,
+                nome_abreviado: formData.nomeAbreviado,
+                cnpj: formData.cnpj,
+            });
+            router.push('/cadastros/bancos');
+        } catch (err) {
+            console.error('Erro ao atualizar banco:', err);
+            alert('Erro ao atualizar banco. Tente novamente.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleCancelar = () => {
@@ -104,7 +100,13 @@ export default function EditarBancoPage() {
         setErrors({});
     };
 
-    if (loading) return <div>Carregando...</div>;
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -194,6 +196,7 @@ export default function EditarBancoPage() {
                 onCancelar={handleCancelar}
                 onLimpar={handleLimpar}
                 mode="edit"
+                isLoading={saving}
             />
         </div>
     );

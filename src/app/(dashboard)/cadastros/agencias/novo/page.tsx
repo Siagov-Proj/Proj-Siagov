@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -17,14 +17,8 @@ import { ActionBar } from '@/components/ui/action-bar';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { maskCep, maskTelefone, maskCodigoComZeros, maskCnpj } from '@/utils/masks';
 import { ESTADOS_BRASIL, FIELD_LIMITS } from '@/utils/constants';
-import { ArrowLeft } from 'lucide-react';
-
-// Mock de bancos
-const mockBancos = [
-    { id: '1', codigo: '001', nome: 'Banco do Brasil S.A.' },
-    { id: '2', codigo: '104', nome: 'Caixa Econômica Federal' },
-    { id: '3', codigo: '341', nome: 'Itaú Unibanco S.A.' },
-];
+import { ArrowLeft, Loader2 } from 'lucide-react';
+import { agenciasService, bancosService, IBancoDB } from '@/services/api';
 
 const emptyFormData = {
     bancoId: '',
@@ -49,6 +43,25 @@ export default function NovaAgenciaPage() {
     const router = useRouter();
     const [formData, setFormData] = useState(emptyFormData);
     const [errors, setErrors] = useState<Record<string, string>>({});
+    const [saving, setSaving] = useState(false);
+    const [bancos, setBancos] = useState<IBancoDB[]>([]);
+    const [loadingBancos, setLoadingBancos] = useState(true);
+
+    const carregarBancos = useCallback(async () => {
+        try {
+            setLoadingBancos(true);
+            const dados = await bancosService.listar();
+            setBancos(dados);
+        } catch (err) {
+            console.error('Erro ao carregar bancos:', err);
+        } finally {
+            setLoadingBancos(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        carregarBancos();
+    }, [carregarBancos]);
 
     const validate = (): boolean => {
         const newErrors: Record<string, string> = {};
@@ -61,10 +74,37 @@ export default function NovaAgenciaPage() {
         return Object.keys(newErrors).length === 0;
     };
 
-    const handleSalvar = () => {
+    const handleSalvar = async () => {
         if (!validate()) return;
-        console.log('Salvando nova agência:', formData);
-        router.push('/cadastros/agencias');
+
+        try {
+            setSaving(true);
+            await agenciasService.criar({
+                banco_id: formData.bancoId,
+                codigo: formData.codigo,
+                digito_verificador: formData.digitoVerificador,
+                nome: formData.nome,
+                nome_abreviado: formData.nomeAbreviado,
+                cnpj: formData.cnpj,
+                praca: formData.praca,
+                gerente: formData.gerente,
+                cep: formData.cep,
+                endereco: formData.endereco,
+                numero: formData.numero,
+                bairro: formData.bairro,
+                municipio: formData.municipio,
+                uf: formData.uf,
+                telefone: formData.telefone,
+                email: formData.email,
+                ativo: true,
+            });
+            router.push('/cadastros/agencias');
+        } catch (err) {
+            console.error('Erro ao salvar agência:', err);
+            alert('Erro ao salvar agência. Tente novamente.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleCancelar = () => {
@@ -106,21 +146,28 @@ export default function NovaAgenciaPage() {
                                     </Label>
                                     <FieldTooltip content="Selecione o banco ao qual a agência pertence" />
                                 </div>
-                                <Select
-                                    value={formData.bancoId}
-                                    onValueChange={(valor) => setFormData({ ...formData, bancoId: valor })}
-                                >
-                                    <SelectTrigger className={errors.bancoId ? 'border-red-500' : ''}>
-                                        <SelectValue placeholder="Selecione o banco" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {mockBancos.map((banco) => (
-                                            <SelectItem key={banco.id} value={banco.id}>
-                                                {banco.codigo} - {banco.nome}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                {loadingBancos ? (
+                                    <div className="flex items-center gap-2 h-10">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        <span className="text-sm text-muted-foreground">Carregando...</span>
+                                    </div>
+                                ) : (
+                                    <Select
+                                        value={formData.bancoId}
+                                        onValueChange={(valor) => setFormData({ ...formData, bancoId: valor })}
+                                    >
+                                        <SelectTrigger className={errors.bancoId ? 'border-red-500' : ''}>
+                                            <SelectValue placeholder="Selecione o banco" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {bancos.map((banco) => (
+                                                <SelectItem key={banco.id} value={banco.id}>
+                                                    {banco.codigo} - {banco.nome}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                )}
                                 {errors.bancoId && <p className="text-sm text-red-500">{errors.bancoId}</p>}
                             </div>
 
@@ -340,7 +387,9 @@ export default function NovaAgenciaPage() {
                 onCancelar={handleCancelar}
                 onLimpar={handleLimpar}
                 mode="create"
+                isLoading={saving}
             />
         </div>
     );
 }
+

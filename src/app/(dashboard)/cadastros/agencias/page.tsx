@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -14,49 +14,34 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Search, Pencil, Trash2, Landmark, ArrowLeft } from 'lucide-react';
-import type { IAgencia } from '@/types';
-
-// Mock de bancos
-const mockBancos = [
-    { id: '1', codigo: '001', nome: 'Banco do Brasil S.A.' },
-    { id: '2', codigo: '104', nome: 'Caixa Econômica Federal' },
-    { id: '3', codigo: '341', nome: 'Itaú Unibanco S.A.' },
-];
-
-const agenciasIniciais: IAgencia[] = [
-    {
-        id: '1',
-        bancoId: '1',
-        codigoBanco: '001',
-        codigo: '0001',
-        digitoVerificador: '5',
-        nome: 'Agência Central',
-        nomeAbreviado: 'AG. CENTRAL',
-        cnpj: '00.000.000/0001-91',
-        praca: 'São Paulo',
-        endereco: 'Av. Paulista, 1000',
-        municipio: 'São Paulo',
-        uf: 'SP',
-        telefone: '(11) 3000-0000',
-        gerente: 'João da Silva',
-        ativo: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-    },
-];
+import { Plus, Search, Pencil, Trash2, Landmark, ArrowLeft, Loader2 } from 'lucide-react';
+import { agenciasService, IAgenciaDB } from '@/services/api';
 
 export default function AgenciasPage() {
     const router = useRouter();
-    const [agencias, setAgencias] = useState<IAgencia[]>(agenciasIniciais);
+    const [agencias, setAgencias] = useState<IAgenciaDB[]>([]);
     const [termoBusca, setTermoBusca] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [deleting, setDeleting] = useState<string | null>(null);
 
-    const agenciasFiltradas = agencias.filter(
-        (ag) =>
-            ag.nome.toLowerCase().includes(termoBusca.toLowerCase()) ||
-            ag.codigo.includes(termoBusca) ||
-            (ag.municipio && ag.municipio.toLowerCase().includes(termoBusca.toLowerCase()))
-    );
+    const carregarAgencias = useCallback(async () => {
+        try {
+            setLoading(true);
+            const dados = await agenciasService.listar(termoBusca);
+            setAgencias(dados);
+        } catch (err) {
+            console.error('Erro ao carregar agências:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, [termoBusca]);
+
+    useEffect(() => {
+        const debounce = setTimeout(() => {
+            carregarAgencias();
+        }, 300);
+        return () => clearTimeout(debounce);
+    }, [carregarAgencias]);
 
     const handleNovo = () => {
         router.push('/cadastros/agencias/novo');
@@ -66,15 +51,19 @@ export default function AgenciasPage() {
         router.push(`/cadastros/agencias/${id}`);
     };
 
-    const handleDelete = (id: string) => {
-        if (confirm('Tem certeza que deseja excluir este agência?')) {
-            setAgencias(agencias.filter((a) => a.id !== id));
+    const handleDelete = async (id: string) => {
+        if (confirm('Tem certeza que deseja excluir esta agência?')) {
+            try {
+                setDeleting(id);
+                await agenciasService.excluir(id);
+                setAgencias(agencias.filter((a) => a.id !== id));
+            } catch (err) {
+                console.error('Erro ao excluir agência:', err);
+                alert('Erro ao excluir agência. Tente novamente.');
+            } finally {
+                setDeleting(null);
+            }
         }
-    };
-
-    const obterNomeBanco = (id: string) => {
-        const banco = mockBancos.find((b) => b.id === id);
-        return banco ? `${banco.codigo} - ${banco.nome}` : '';
     };
 
     return (
@@ -110,7 +99,7 @@ export default function AgenciasPage() {
                         <div>
                             <CardTitle>Lista de Agências</CardTitle>
                             <CardDescription>
-                                {agenciasFiltradas.length} agência(s) cadastrada(s)
+                                {loading ? 'Carregando...' : `${agencias.length} agência(s) cadastrada(s)`}
                             </CardDescription>
                         </div>
                         <div className="relative w-full sm:w-64">
@@ -125,59 +114,71 @@ export default function AgenciasPage() {
                     </div>
                 </CardHeader>
                 <CardContent>
-                    <div className="rounded-md border">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-28">Agência</TableHead>
-                                    <TableHead>Banco</TableHead>
-                                    <TableHead>Nome</TableHead>
-                                    <TableHead>Município/UF</TableHead>
-                                    <TableHead>Telefone</TableHead>
-                                    <TableHead className="w-24 text-center">Ações</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {agenciasFiltradas.length === 0 ? (
+                    {loading ? (
+                        <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : (
+                        <div className="rounded-md border">
+                            <Table>
+                                <TableHeader>
                                     <TableRow>
-                                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                                            Nenhuma agência encontrada
-                                        </TableCell>
+                                        <TableHead className="w-28">Agência</TableHead>
+                                        <TableHead>Banco</TableHead>
+                                        <TableHead>Nome</TableHead>
+                                        <TableHead>Município/UF</TableHead>
+                                        <TableHead>Telefone</TableHead>
+                                        <TableHead className="w-24 text-center">Ações</TableHead>
                                     </TableRow>
-                                ) : (
-                                    agenciasFiltradas.map((agencia) => (
-                                        <TableRow key={agencia.id}>
-                                            <TableCell className="font-mono">
-                                                {agencia.codigo}{agencia.digitoVerificador ? `-${agencia.digitoVerificador}` : ''}
-                                            </TableCell>
-                                            <TableCell className="text-sm">{obterNomeBanco(agencia.bancoId)}</TableCell>
-                                            <TableCell className="font-medium">{agencia.nome}</TableCell>
-                                            <TableCell className="text-sm">
-                                                {agencia.municipio}{agencia.uf ? `/${agencia.uf}` : ''}
-                                            </TableCell>
-                                            <TableCell className="text-sm">{agencia.telefone}</TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center justify-center gap-1">
-                                                    <Button variant="ghost" size="icon" onClick={() => handleEdit(agencia.id)}
-                                                    >
-                                                        <Pencil className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => handleDelete(agencia.id)}
-                                                        className="text-red-500 hover:text-red-600"
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
+                                </TableHeader>
+                                <TableBody>
+                                    {agencias.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                                                Nenhuma agência encontrada
                                             </TableCell>
                                         </TableRow>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
+                                    ) : (
+                                        agencias.map((agencia) => (
+                                            <TableRow key={agencia.id}>
+                                                <TableCell className="font-mono">
+                                                    {agencia.codigo}{agencia.digito_verificador ? `-${agencia.digito_verificador}` : ''}
+                                                </TableCell>
+                                                <TableCell className="text-sm">
+                                                    {agencia.banco ? `${agencia.banco.codigo} - ${agencia.banco.nome}` : '-'}
+                                                </TableCell>
+                                                <TableCell className="font-medium">{agencia.nome}</TableCell>
+                                                <TableCell className="text-sm">
+                                                    {agencia.municipio}{agencia.uf ? `/${agencia.uf}` : ''}
+                                                </TableCell>
+                                                <TableCell className="text-sm">{agencia.telefone || '-'}</TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        <Button variant="ghost" size="icon" onClick={() => handleEdit(agencia.id)}>
+                                                            <Pencil className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => handleDelete(agencia.id)}
+                                                            className="text-red-500 hover:text-red-600"
+                                                            disabled={deleting === agencia.id}
+                                                        >
+                                                            {deleting === agencia.id ? (
+                                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                            ) : (
+                                                                <Trash2 className="h-4 w-4" />
+                                                            )}
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>

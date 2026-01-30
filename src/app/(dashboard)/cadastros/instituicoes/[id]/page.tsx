@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -16,59 +16,15 @@ import {
 import { ActionBar } from '@/components/ui/action-bar';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { maskCnpj, maskCep } from '@/utils/masks';
-import { ESFERAS, ESTADOS_BRASIL, FIELD_LIMITS } from '@/utils/constants';
-import type { IInstituicao } from '@/types';
-import { ArrowLeft } from 'lucide-react';
-
-// Mock data duplicated for simulation
-const mockInstituicoes = [
-    {
-        id: '1',
-        codigo: '001',
-        nome: 'Ministério da Fazenda',
-        nomeAbreviado: 'MF',
-        esfera: 'Federal',
-        cnpj: '00.000.000/0001-00',
-        email: 'contato@fazenda.gov.br',
-        codigoSiasg: '123456',
-        cep: '70000-000',
-        logradouro: 'Esplanada dos Ministérios, Bloco P',
-        numero: 'S/N',
-        complemento: '',
-        bairro: 'Zona Cívico-Administrativa',
-        municipio: 'Brasília',
-        uf: 'DF',
-        ativo: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-    },
-    {
-        id: '2',
-        codigo: '002',
-        nome: 'Ministério da Educação',
-        nomeAbreviado: 'MEC',
-        esfera: 'Federal',
-        cnpj: '00.000.000/0002-00',
-        email: 'contato@mec.gov.br',
-        codigoSiasg: '234567',
-        cep: '70047-900',
-        logradouro: 'Esplanada dos Ministérios, Bloco L',
-        numero: 'S/N',
-        complemento: '',
-        bairro: 'Zona Cívico-Administrativa',
-        municipio: 'Brasília',
-        uf: 'DF',
-        ativo: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-    },
-];
+import { ESTADOS_BRASIL, FIELD_LIMITS } from '@/utils/constants';
+import { ArrowLeft, Loader2 } from 'lucide-react';
+import { instituicoesService, esferasService, IEsferaDB, IInstituicaoDB } from '@/services/api';
 
 const emptyFormData = {
     codigo: '',
     nome: '',
     nomeAbreviado: '',
-    esfera: '' as IInstituicao['esfera'] | '',
+    esferaId: '',
     cnpj: '',
     email: '',
     codigoSiasg: '',
@@ -85,53 +41,106 @@ export default function EditarInstituicaoPage() {
     const router = useRouter();
     const params = useParams();
     const [formData, setFormData] = useState(emptyFormData);
-    const [originalData, setOriginalData] = useState(emptyFormData); // For reset
+    const [originalData, setOriginalData] = useState(emptyFormData);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [esferas, setEsferas] = useState<IEsferaDB[]>([]);
+    const [loadingEsferas, setLoadingEsferas] = useState(true);
+
+    const carregarEsferas = useCallback(async () => {
+        try {
+            setLoadingEsferas(true);
+            const dados = await esferasService.listar();
+            setEsferas(dados);
+        } catch (err) {
+            console.error('Erro ao carregar esferas:', err);
+        } finally {
+            setLoadingEsferas(false);
+        }
+    }, []);
+
+    const carregarInstituicao = useCallback(async () => {
+        try {
+            setLoading(true);
+            const id = params.id as string;
+            const instituicao = await instituicoesService.buscarPorId(id);
+
+            if (instituicao) {
+                const data = {
+                    codigo: instituicao.codigo,
+                    nome: instituicao.nome,
+                    nomeAbreviado: instituicao.nome_abreviado || '',
+                    esferaId: instituicao.esfera_id || '',
+                    cnpj: instituicao.cnpj || '',
+                    email: instituicao.email || '',
+                    codigoSiasg: instituicao.codigo_siasg || '',
+                    cep: instituicao.cep || '',
+                    logradouro: instituicao.logradouro || '',
+                    numero: instituicao.numero || '',
+                    complemento: instituicao.complemento || '',
+                    bairro: instituicao.bairro || '',
+                    municipio: instituicao.municipio || '',
+                    uf: instituicao.uf || '',
+                };
+                setFormData(data);
+                setOriginalData(data);
+            } else {
+                alert('Instituição não encontrada');
+                router.push('/cadastros/instituicoes');
+            }
+        } catch (err) {
+            console.error('Erro ao carregar instituição:', err);
+            alert('Erro ao carregar instituição. Tente novamente.');
+            router.push('/cadastros/instituicoes');
+        } finally {
+            setLoading(false);
+        }
+    }, [params.id, router]);
 
     useEffect(() => {
-        // Simulando fetch
-        const id = params.id as string;
-        const found = mockInstituicoes.find(i => i.id === id);
-
-        if (found) {
-            const data = {
-                codigo: found.codigo,
-                nome: found.nome,
-                nomeAbreviado: found.nomeAbreviado,
-                esfera: found.esfera as IInstituicao['esfera'],
-                cnpj: found.cnpj,
-                email: found.email,
-                codigoSiasg: found.codigoSiasg,
-                cep: found.cep,
-                logradouro: found.logradouro,
-                numero: found.numero,
-                complemento: found.complemento,
-                bairro: found.bairro,
-                municipio: found.municipio,
-                uf: found.uf,
-            };
-            setFormData(data);
-            setOriginalData(data);
-        }
-        setLoading(false);
-    }, [params.id]);
+        carregarEsferas();
+        carregarInstituicao();
+    }, [carregarEsferas, carregarInstituicao]);
 
     const validate = (): boolean => {
         const newErrors: Record<string, string> = {};
 
         if (!formData.nome) newErrors.nome = 'Nome é obrigatório';
-        if (!formData.esfera) newErrors.esfera = 'Esfera é obrigatória';
+        if (!formData.esferaId) newErrors.esfera = 'Esfera é obrigatória';
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
 
-    const handleSalvar = () => {
+    const handleSalvar = async () => {
         if (!validate()) return;
 
-        console.log('Atualizando instituição:', params.id, formData);
-        router.push('/cadastros/instituicoes');
+        try {
+            setSaving(true);
+            await instituicoesService.atualizar(params.id as string, {
+                codigo: formData.codigo,
+                nome: formData.nome,
+                nome_abreviado: formData.nomeAbreviado,
+                esfera_id: formData.esferaId,
+                cnpj: formData.cnpj,
+                email: formData.email,
+                codigo_siasg: formData.codigoSiasg,
+                cep: formData.cep,
+                logradouro: formData.logradouro,
+                numero: formData.numero,
+                complemento: formData.complemento,
+                bairro: formData.bairro,
+                municipio: formData.municipio,
+                uf: formData.uf,
+            });
+            router.push('/cadastros/instituicoes');
+        } catch (err) {
+            console.error('Erro ao atualizar instituição:', err);
+            alert('Erro ao atualizar instituição. Tente novamente.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleCancelar = () => {
@@ -143,7 +152,13 @@ export default function EditarInstituicaoPage() {
         setErrors({});
     };
 
-    if (loading) return <div>Carregando...</div>;
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -224,23 +239,30 @@ export default function EditarInstituicaoPage() {
                                     </Label>
                                     <FieldTooltip content="Esfera de governo: Federal, Estadual, Municipal ou Distrital" />
                                 </div>
-                                <Select
-                                    value={formData.esfera}
-                                    onValueChange={(value) =>
-                                        setFormData({ ...formData, esfera: value as IInstituicao['esfera'] })
-                                    }
-                                >
-                                    <SelectTrigger className={errors.esfera ? 'border-red-500' : ''}>
-                                        <SelectValue placeholder="Selecione a esfera" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {ESFERAS.map((esfera) => (
-                                            <SelectItem key={esfera.value} value={esfera.value}>
-                                                {esfera.label}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                {loadingEsferas ? (
+                                    <div className="flex items-center gap-2 h-10">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        <span className="text-sm text-muted-foreground">Carregando...</span>
+                                    </div>
+                                ) : (
+                                    <Select
+                                        value={formData.esferaId}
+                                        onValueChange={(value) =>
+                                            setFormData({ ...formData, esferaId: value })
+                                        }
+                                    >
+                                        <SelectTrigger className={errors.esfera ? 'border-red-500' : ''}>
+                                            <SelectValue placeholder="Selecione a esfera" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {esferas.map((esfera) => (
+                                                <SelectItem key={esfera.id} value={esfera.id}>
+                                                    {esfera.nome}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                )}
                                 {errors.esfera && <p className="text-sm text-red-500">{errors.esfera}</p>}
                             </div>
                         </div>
@@ -398,6 +420,7 @@ export default function EditarInstituicaoPage() {
                 onCancelar={handleCancelar}
                 onLimpar={handleLimpar}
                 mode="edit"
+                isLoading={saving}
             />
         </div>
     );

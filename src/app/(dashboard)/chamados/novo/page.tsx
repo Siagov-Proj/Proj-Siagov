@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { chamadosService } from '@/services/api/chamadosService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -53,26 +54,30 @@ export default function NovoChamadoPage() {
         return Object.keys(novosErros).length === 0;
     };
 
+    // ...
+
     const salvar = async () => {
         if (!validar()) return;
 
         setSalvando(true);
+        try {
+            await chamadosService.criar({
+                assunto: formData.assunto,
+                categoria: formData.categoria as any, // Cast to enum
+                prioridade: formData.prioridade as any,
+                descricao: formData.descricao,
+                status: 'Aberto',
+                criado_por: 'Administrador Sistema' // Hardcoded for now, ideal: fetching from Auth
+            });
 
-        // Simula salvamento
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        // Gera protocolo
-        const protocolo = `2025-${String(Math.floor(Math.random() * 999) + 1).padStart(3, '0')}`;
-
-        console.log('Chamado criado:', {
-            ...formData,
-            protocolo,
-            status: 'Aberto',
-            criadoEm: new Date().toISOString(),
-        });
-
-        // Redireciona para listagem ou detalhes
-        router.push('/chamados');
+            // Redireciona para listagem
+            router.push('/chamados');
+        } catch (error) {
+            console.error('Erro ao criar chamado:', error);
+            // Optional: show error toast
+        } finally {
+            setSalvando(false);
+        }
     };
 
     return (

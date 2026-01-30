@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -15,60 +15,34 @@ import {
 } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Search, Pencil, Trash2, Building, ArrowLeft } from 'lucide-react';
-import type { IOrgao } from '@/types';
-
-// Mock data
-const mockInstituicoes = [
-    { id: '1', nome: 'Ministério da Fazenda', codigo: '001' },
-    { id: '2', nome: 'Ministério da Educação', codigo: '002' },
-    { id: '3', nome: 'Ministério da Saúde', codigo: '003' },
-];
-
-const initialOrgaos: IOrgao[] = [
-    {
-        id: '1',
-        codigo: '000001',
-        instituicaoId: '1',
-        poderVinculado: 'Executivo',
-        nome: 'Secretaria de Finanças',
-        sigla: 'SEFIN',
-        cnpj: '00.000.000/0001-00',
-        codigoSiasg: '123456',
-        ugTce: '12345',
-        ugSiafemSigef: '123456',
-        ativo: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-    },
-    {
-        id: '2',
-        codigo: '000002',
-        instituicaoId: '1',
-        poderVinculado: 'Executivo',
-        nome: 'Secretaria de Administração',
-        sigla: 'SEAD',
-        cnpj: '00.000.000/0002-00',
-        codigoSiasg: '234567',
-        ugTce: '23456',
-        ugSiafemSigef: '234567',
-        ativo: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-    },
-];
+import { Plus, Search, Pencil, Trash2, Building, ArrowLeft, Loader2 } from 'lucide-react';
+import { orgaosService, IOrgaoDB } from '@/services/api';
 
 export default function OrgaosPage() {
     const router = useRouter();
-    const [orgaos, setOrgaos] = useState<IOrgao[]>(initialOrgaos);
+    const [orgaos, setOrgaos] = useState<IOrgaoDB[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [deleting, setDeleting] = useState<string | null>(null);
 
-    const filteredOrgaos = orgaos.filter(
-        (org) =>
-            org.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            org.sigla.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            org.codigo.includes(searchTerm)
-    );
+    const carregarOrgaos = useCallback(async () => {
+        try {
+            setLoading(true);
+            const dados = await orgaosService.listar(searchTerm);
+            setOrgaos(dados);
+        } catch (err) {
+            console.error('Erro ao carregar órgãos:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, [searchTerm]);
+
+    useEffect(() => {
+        const debounce = setTimeout(() => {
+            carregarOrgaos();
+        }, 300);
+        return () => clearTimeout(debounce);
+    }, [carregarOrgaos]);
 
     const handleNovo = () => {
         router.push('/cadastros/orgaos/novo');
@@ -78,14 +52,25 @@ export default function OrgaosPage() {
         router.push(`/cadastros/orgaos/${id}`);
     };
 
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
         if (confirm('Tem certeza que deseja excluir este órgão?')) {
-            setOrgaos(orgaos.filter((o) => o.id !== id));
+            try {
+                setDeleting(id);
+                // Check for linked unidades gestoras
+                const count = await orgaosService.contarUnidadesGestoras(id);
+                if (count > 0) {
+                    alert(`Não é possível excluir. Existem ${count} unidade(s) gestora(s) vinculada(s) a este órgão.`);
+                    return;
+                }
+                await orgaosService.excluir(id);
+                setOrgaos(orgaos.filter((o) => o.id !== id));
+            } catch (err) {
+                console.error('Erro ao excluir órgão:', err);
+                alert('Erro ao excluir órgão. Tente novamente.');
+            } finally {
+                setDeleting(null);
+            }
         }
-    };
-
-    const getInstituicaoNome = (id: string) => {
-        return mockInstituicoes.find((i) => i.id === id)?.nome || '';
     };
 
     return (
@@ -121,7 +106,7 @@ export default function OrgaosPage() {
                         <div>
                             <CardTitle>Lista de Órgãos</CardTitle>
                             <CardDescription>
-                                {filteredOrgaos.length} órgão(s) encontrado(s)
+                                {loading ? 'Carregando...' : `${orgaos.length} órgão(s) encontrado(s)`}
                             </CardDescription>
                         </div>
                         <div className="relative w-full sm:w-64">
@@ -136,60 +121,71 @@ export default function OrgaosPage() {
                     </div>
                 </CardHeader>
                 <CardContent>
-                    <div className="rounded-md border">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-24">Código</TableHead>
-                                    <TableHead>Nome</TableHead>
-                                    <TableHead className="w-20">Sigla</TableHead>
-                                    <TableHead>Instituição</TableHead>
-                                    <TableHead>Poder</TableHead>
-                                    <TableHead className="w-24 text-center">Ações</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {filteredOrgaos.length === 0 ? (
+                    {loading ? (
+                        <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : (
+                        <div className="rounded-md border">
+                            <Table>
+                                <TableHeader>
                                     <TableRow>
-                                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                                            Nenhum órgão encontrado
-                                        </TableCell>
+                                        <TableHead className="w-24">Código</TableHead>
+                                        <TableHead>Nome</TableHead>
+                                        <TableHead className="w-20">Sigla</TableHead>
+                                        <TableHead>Instituição</TableHead>
+                                        <TableHead>Poder</TableHead>
+                                        <TableHead className="w-24 text-center">Ações</TableHead>
                                     </TableRow>
-                                ) : (
-                                    filteredOrgaos.map((orgao) => (
-                                        <TableRow key={orgao.id}>
-                                            <TableCell className="font-mono">{orgao.codigo}</TableCell>
-                                            <TableCell className="font-medium">{orgao.nome}</TableCell>
-                                            <TableCell>{orgao.sigla}</TableCell>
-                                            <TableCell>{getInstituicaoNome(orgao.instituicaoId)}</TableCell>
-                                            <TableCell>
-                                                <Badge variant="outline">{orgao.poderVinculado}</Badge>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center justify-center gap-1">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => handleEdit(orgao.id)}
-                                                    >
-                                                        <Pencil className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => handleDelete(orgao.id)}
-                                                        className="text-red-500 hover:text-red-600"
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
+                                </TableHeader>
+                                <TableBody>
+                                    {orgaos.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                                                Nenhum órgão encontrado
                                             </TableCell>
                                         </TableRow>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
+                                    ) : (
+                                        orgaos.map((orgao) => (
+                                            <TableRow key={orgao.id}>
+                                                <TableCell className="font-mono">{orgao.codigo}</TableCell>
+                                                <TableCell className="font-medium">{orgao.nome}</TableCell>
+                                                <TableCell>{orgao.sigla}</TableCell>
+                                                <TableCell>{orgao.instituicao?.nome || '-'}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline">{orgao.poder_vinculado}</Badge>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => handleEdit(orgao.id)}
+                                                        >
+                                                            <Pencil className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => handleDelete(orgao.id)}
+                                                            className="text-red-500 hover:text-red-600"
+                                                            disabled={deleting === orgao.id}
+                                                        >
+                                                            {deleting === orgao.id ? (
+                                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                            ) : (
+                                                                <Trash2 className="h-4 w-4" />
+                                                            )}
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>

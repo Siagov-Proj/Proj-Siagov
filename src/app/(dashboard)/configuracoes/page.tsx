@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,18 +23,22 @@ import {
     Shield,
     Save,
     RefreshCw,
+    Loader2
 } from 'lucide-react';
+import { configuracoesService, IConfiguracaoDB } from '@/services/api/configuracoesService';
 
 export default function ConfiguracoesPage() {
     const [salvando, setSalvando] = useState(false);
+    const [carregando, setCarregando] = useState(true);
+    const [configId, setConfigId] = useState<string | null>(null);
 
     // Estados de configuração
     const [configGeral, setConfigGeral] = useState({
-        nomeInstituicao: 'SIAGOV - Sistema Integrado',
-        sigla: 'SIAGOV',
-        cnpj: '00.000.000/0001-00',
-        email: 'contato@siagov.gov.br',
-        telefone: '(11) 1234-5678',
+        nomeInstituicao: '',
+        sigla: '',
+        cnpj: '',
+        email: '',
+        telefone: '',
     });
 
     const [configTema, setConfigTema] = useState({
@@ -57,18 +61,71 @@ export default function ConfiguracoesPage() {
         emailHabilitado: false,
     });
 
+    const carregarConfiguracoes = useCallback(async () => {
+        setCarregando(true);
+        try {
+            const data = await configuracoesService.obterAtual();
+            if (data) {
+                setConfigId(data.id);
+                setConfigGeral({
+                    nomeInstituicao: data.nome_instituicao || '',
+                    sigla: data.sigla || '',
+                    cnpj: data.cnpj || '',
+                    email: data.email_contato || '',
+                    telefone: data.telefone || ''
+                });
+                if (data.tema) setConfigTema(data.tema);
+                if (data.notificacoes) setConfigNotificacoes(data.notificacoes);
+                if (data.integracoes) setConfigIntegracoes(data.integracoes);
+            }
+        } catch (error) {
+            console.error('Erro ao carregar configurações:', error);
+            // Alert or silent fail?
+        } finally {
+            setCarregando(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        carregarConfiguracoes();
+    }, [carregarConfiguracoes]);
+
     const salvarConfiguracoes = async () => {
         setSalvando(true);
-        // Simula salvamento
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        console.log('Configurações salvas:', {
-            configGeral,
-            configTema,
-            configNotificacoes,
-            configIntegracoes,
-        });
-        setSalvando(false);
+        try {
+            const payload: Partial<IConfiguracaoDB> = {
+                nome_instituicao: configGeral.nomeInstituicao,
+                sigla: configGeral.sigla,
+                cnpj: configGeral.cnpj,
+                email_contato: configGeral.email,
+                telefone: configGeral.telefone,
+                tema: configTema,
+                notificacoes: configNotificacoes,
+                integracoes: configIntegracoes,
+            };
+
+            await configuracoesService.salvar(payload);
+
+            console.log('Sucesso: Configurações salvas!');
+
+            // Recarregar para garantir sincronia
+            await carregarConfiguracoes();
+
+        } catch (error) {
+            console.error('Erro ao salvar:', error);
+            alert('Erro ao salvar as configurações.');
+        } finally {
+            setSalvando(false);
+        }
     };
+
+    if (carregando) {
+        return (
+            <div className="flex h-screen items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -84,8 +141,17 @@ export default function ConfiguracoesPage() {
                     </p>
                 </div>
                 <Button onClick={salvarConfiguracoes} disabled={salvando}>
-                    <Save className="mr-2 h-4 w-4" />
-                    {salvando ? 'Salvando...' : 'Salvar Alterações'}
+                    {salvando ? (
+                        <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Salvando...
+                        </>
+                    ) : (
+                        <>
+                            <Save className="mr-2 h-4 w-4" />
+                            Salvar Alterações
+                        </>
+                    )}
                 </Button>
             </div>
 
@@ -342,8 +408,8 @@ export default function ConfiguracoesPage() {
                                     <div className="flex items-center gap-4">
                                         <div
                                             className={`w-3 h-3 rounded-full ${configIntegracoes.supabaseConectado
-                                                    ? 'bg-green-500'
-                                                    : 'bg-red-500'
+                                                ? 'bg-green-500'
+                                                : 'bg-red-500'
                                                 }`}
                                         />
                                         <span>

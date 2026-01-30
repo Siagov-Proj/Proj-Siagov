@@ -15,6 +15,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ActionBar } from '@/components/ui/action-bar';
 import { ArrowLeft, FolderOpen } from 'lucide-react';
+import { categoriasDocService } from '@/services/api';
 
 const LEIS = [
     'Lei 14.133/2021',
@@ -33,6 +34,7 @@ export default function NovaCategoriaPage() {
     const router = useRouter();
     const [formData, setFormData] = useState(formVazio);
     const [erros, setErros] = useState<Record<string, string>>({});
+    const [saving, setSaving] = useState(false);
 
     const validar = (): boolean => {
         const novosErros: Record<string, string> = {};
@@ -42,10 +44,24 @@ export default function NovaCategoriaPage() {
         return Object.keys(novosErros).length === 0;
     };
 
-    const handleSalvar = () => {
+    const handleSalvar = async () => {
         if (!validar()) return;
-        console.log('Salvando nova categoria:', formData);
-        router.push('/cadastros/categorias-documentos');
+
+        try {
+            setSaving(true);
+            await categoriasDocService.criarCategoria({
+                nome: formData.nome,
+                descricao: formData.descricao,
+                lei: formData.lei,
+                ativo: true,
+            });
+            router.push('/cadastros/categorias-documentos');
+        } catch (err) {
+            console.error('Erro ao salvar categoria:', err);
+            alert('Erro ao salvar categoria. Tente novamente.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleCancelar = () => {
@@ -133,7 +149,9 @@ export default function NovaCategoriaPage() {
                 onCancelar={handleCancelar}
                 onLimpar={handleLimpar}
                 mode="create"
+                isLoading={saving}
             />
         </div>
     );
 }
+

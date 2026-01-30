@@ -1,0 +1,21 @@
+⚠️  Node.js 18 and below are deprecated and will no longer be supported in future versions of @supabase/supabase-js. Please upgrade to Node.js 20 or later. For more information, visit: https://github.com/orgs/supabase/discussions/37217
+--- STARTING FULL E2E (LOGIN + CHAMADOS) ---
+
+[PART 1] Testing Authentication Flow
+1.1 Lookup Email for CPF: 123.456.789-00
+   SUCCESS: Found email admin@siagov.com
+1.2 Attempting Sign In
+   FAILED: Sign In Error Email not confirmed
+
+--- TEST FAILED ---
+AuthApiError: Email not confirmed
+    at handleError (C:\Users\JoãoVictorRibeiroLag\Documents\Projetos Highcode\Projeto Siagov\siagov-next\node_modules\@supabase\auth-js\src\lib\fetch.ts:102:9)
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at _handleRequest (C:\Users\JoãoVictorRibeiroLag\Documents\Projetos Highcode\Projeto Siagov\siagov-next\node_modules\@supabase\auth-js\src\lib\fetch.ts:195:5)
+    at _request (C:\Users\JoãoVictorRibeiroLag\Documents\Projetos Highcode\Projeto Siagov\siagov-next\node_modules\@supabase\auth-js\src\lib\fetch.ts:157:16)
+    at SupabaseAuthClient.signInWithPassword (C:\Users\JoãoVictorRibeiroLag\Documents\Projetos Highcode\Projeto Siagov\siagov-next\node_modules\@supabase\auth-js\src\GoTrueClient.ts:627:15)
+    at runFullE2E (c:\Users\Jo%C3%A3oVictorRibeiroLag\Documents\Projetos Highcode\Projeto Siagov\siagov-next\scripts\qa_full_e2e.ts:49:50) {
+  __isAuthError: true,
+  status: 400,
+  code: 'email_not_confirmed'
+}

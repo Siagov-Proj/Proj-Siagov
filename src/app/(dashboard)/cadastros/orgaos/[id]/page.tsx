@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -18,46 +18,8 @@ import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { maskCnpj, maskCodigoComZeros } from '@/utils/masks';
 import { PODERES, FIELD_LIMITS } from '@/utils/constants';
 import type { IOrgao } from '@/types';
-import { ArrowLeft } from 'lucide-react';
-
-const mockInstituicoes = [
-    { id: '1', nome: 'Ministério da Fazenda', codigo: '001' },
-    { id: '2', nome: 'Ministério da Educação', codigo: '002' },
-    { id: '3', nome: 'Ministério da Saúde', codigo: '003' },
-];
-
-const mockOrgaos: IOrgao[] = [
-    {
-        id: '1',
-        codigo: '000001',
-        instituicaoId: '1',
-        poderVinculado: 'Executivo',
-        nome: 'Secretaria de Finanças',
-        sigla: 'SEFIN',
-        cnpj: '00.000.000/0001-00',
-        codigoSiasg: '123456',
-        ugTce: '12345',
-        ugSiafemSigef: '123456',
-        ativo: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-    },
-    {
-        id: '2',
-        codigo: '000002',
-        instituicaoId: '1',
-        poderVinculado: 'Executivo',
-        nome: 'Secretaria de Administração',
-        sigla: 'SEAD',
-        cnpj: '00.000.000/0002-00',
-        codigoSiasg: '234567',
-        ugTce: '23456',
-        ugSiafemSigef: '234567',
-        ativo: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-    },
-];
+import { ArrowLeft, Loader2 } from 'lucide-react';
+import { orgaosService, instituicoesService, IInstituicaoDB } from '@/services/api';
 
 const emptyFormData = {
     codigo: '',
@@ -80,30 +42,54 @@ export default function EditarOrgaoPage() {
     const [originalData, setOriginalData] = useState(emptyFormData);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [instituicoes, setInstituicoes] = useState<IInstituicaoDB[]>([]);
+
+    const carregarDados = useCallback(async () => {
+        try {
+            setLoading(true);
+            const id = params.id as string;
+
+            // Carrega instituições e órgão em paralelo
+            const [listaInstituicoes, orgao] = await Promise.all([
+                instituicoesService.listar(),
+                orgaosService.buscarPorId(id),
+            ]);
+
+            setInstituicoes(listaInstituicoes);
+
+            if (orgao) {
+                const data = {
+                    codigo: orgao.codigo,
+                    instituicaoId: orgao.instituicao_id || '',
+                    poderVinculado: orgao.poder_vinculado as IOrgao['poderVinculado'] || '',
+                    nome: orgao.nome,
+                    sigla: orgao.sigla || '',
+                    cnpj: orgao.cnpj || '',
+                    codigoSiasg: orgao.codigo_siasg || '',
+                    ugTce: orgao.ug_tce || '',
+                    ugSiafemSigef: orgao.ug_siafem_sigef || '',
+                    nomeAnterior: orgao.nome_anterior || '',
+                    nomeAbreviadoAnterior: orgao.nome_abreviado_anterior || '',
+                };
+                setFormData(data);
+                setOriginalData(data);
+            } else {
+                alert('Órgão não encontrado');
+                router.push('/cadastros/orgaos');
+            }
+        } catch (err) {
+            console.error('Erro ao carregar dados:', err);
+            alert('Erro ao carregar dados. Tente novamente.');
+            router.push('/cadastros/orgaos');
+        } finally {
+            setLoading(false);
+        }
+    }, [params.id, router]);
 
     useEffect(() => {
-        const id = params.id as string;
-        const found = mockOrgaos.find(o => o.id === id);
-
-        if (found) {
-            const data = {
-                codigo: found.codigo,
-                instituicaoId: found.instituicaoId,
-                poderVinculado: found.poderVinculado,
-                nome: found.nome,
-                sigla: found.sigla,
-                cnpj: found.cnpj,
-                codigoSiasg: found.codigoSiasg,
-                ugTce: found.ugTce,
-                ugSiafemSigef: found.ugSiafemSigef,
-                nomeAnterior: found.nomeAnterior || '',
-                nomeAbreviadoAnterior: found.nomeAbreviadoAnterior || '',
-            };
-            setFormData(data);
-            setOriginalData(data);
-        }
-        setLoading(false);
-    }, [params.id]);
+        carregarDados();
+    }, [carregarDados]);
 
     const validate = (): boolean => {
         const newErrors: Record<string, string> = {};
@@ -118,10 +104,31 @@ export default function EditarOrgaoPage() {
         return Object.keys(newErrors).length === 0;
     };
 
-    const handleSalvar = () => {
+    const handleSalvar = async () => {
         if (!validate()) return;
-        console.log('Atualizando órgão:', params.id, formData);
-        router.push('/cadastros/orgaos');
+
+        try {
+            setSaving(true);
+            await orgaosService.atualizar(params.id as string, {
+                codigo: formData.codigo,
+                instituicao_id: formData.instituicaoId,
+                poder_vinculado: formData.poderVinculado,
+                nome: formData.nome,
+                sigla: formData.sigla,
+                cnpj: formData.cnpj,
+                codigo_siasg: formData.codigoSiasg,
+                ug_tce: formData.ugTce,
+                ug_siafem_sigef: formData.ugSiafemSigef,
+                nome_anterior: formData.nomeAnterior,
+                nome_abreviado_anterior: formData.nomeAbreviadoAnterior,
+            });
+            router.push('/cadastros/orgaos');
+        } catch (err) {
+            console.error('Erro ao atualizar órgão:', err);
+            alert('Erro ao atualizar órgão. Tente novamente.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleCancelar = () => {
@@ -133,7 +140,13 @@ export default function EditarOrgaoPage() {
         setErrors({});
     };
 
-    if (loading) return <div>Carregando...</div>;
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -193,7 +206,7 @@ export default function EditarOrgaoPage() {
                                         <SelectValue placeholder="Selecione a instituição" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {mockInstituicoes.map((inst) => (
+                                        {instituicoes.map((inst) => (
                                             <SelectItem key={inst.id} value={inst.id}>
                                                 {inst.codigo} - {inst.nome}
                                             </SelectItem>
@@ -385,7 +398,9 @@ export default function EditarOrgaoPage() {
                 onCancelar={handleCancelar}
                 onLimpar={handleLimpar}
                 mode="edit"
+                isLoading={saving}
             />
         </div>
     );
 }
+

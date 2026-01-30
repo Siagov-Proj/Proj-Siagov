@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -15,16 +15,16 @@ import {
 } from '@/components/ui/select';
 import { ActionBar } from '@/components/ui/action-bar';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
-import { maskCnpj, maskCep, maskCodigoComZeros } from '@/utils/masks';
-import { ESFERAS, ESTADOS_BRASIL, FIELD_LIMITS } from '@/utils/constants';
-import type { IInstituicao } from '@/types';
-import { ArrowLeft } from 'lucide-react';
+import { maskCnpj, maskCep } from '@/utils/masks';
+import { ESTADOS_BRASIL, FIELD_LIMITS } from '@/utils/constants';
+import { ArrowLeft, Loader2 } from 'lucide-react';
+import { instituicoesService, esferasService, IEsferaDB } from '@/services/api';
 
 const emptyFormData = {
-    codigo: '003', // Mock sequential code
+    codigo: '',
     nome: '',
     nomeAbreviado: '',
-    esfera: '' as IInstituicao['esfera'] | '',
+    esferaId: '',
     cnpj: '',
     email: '',
     codigoSiasg: '',
@@ -41,25 +41,77 @@ export default function NovaInstituicaoPage() {
     const router = useRouter();
     const [formData, setFormData] = useState(emptyFormData);
     const [errors, setErrors] = useState<Record<string, string>>({});
+    const [saving, setSaving] = useState(false);
+    const [esferas, setEsferas] = useState<IEsferaDB[]>([]);
+    const [loadingEsferas, setLoadingEsferas] = useState(true);
+
+    const carregarEsferas = useCallback(async () => {
+        try {
+            setLoadingEsferas(true);
+            const dados = await esferasService.listar();
+            setEsferas(dados);
+        } catch (err) {
+            console.error('Erro ao carregar esferas:', err);
+        } finally {
+            setLoadingEsferas(false);
+        }
+    }, []);
+
+    const gerarProximoCodigo = useCallback(async () => {
+        try {
+            const count = await instituicoesService.contar();
+            const codigo = String(count + 1).padStart(3, '0');
+            setFormData(prev => ({ ...prev, codigo }));
+        } catch (err) {
+            console.error('Erro ao gerar código:', err);
+            setFormData(prev => ({ ...prev, codigo: '001' }));
+        }
+    }, []);
+
+    useEffect(() => {
+        carregarEsferas();
+        gerarProximoCodigo();
+    }, [carregarEsferas, gerarProximoCodigo]);
 
     const validate = (): boolean => {
         const newErrors: Record<string, string> = {};
 
         if (!formData.nome) newErrors.nome = 'Nome é obrigatório';
-        if (!formData.esfera) newErrors.esfera = 'Esfera é obrigatória';
+        if (!formData.esferaId) newErrors.esfera = 'Esfera é obrigatória';
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
 
-    const handleSalvar = () => {
+    const handleSalvar = async () => {
         if (!validate()) return;
 
-        // Simulating save
-        console.log('Salvando nova instituição:', formData);
-
-        // Navigate back to list
-        router.push('/cadastros/instituicoes');
+        try {
+            setSaving(true);
+            await instituicoesService.criar({
+                codigo: formData.codigo,
+                nome: formData.nome,
+                nome_abreviado: formData.nomeAbreviado,
+                esfera_id: formData.esferaId,
+                cnpj: formData.cnpj,
+                email: formData.email,
+                codigo_siasg: formData.codigoSiasg,
+                cep: formData.cep,
+                logradouro: formData.logradouro,
+                numero: formData.numero,
+                complemento: formData.complemento,
+                bairro: formData.bairro,
+                municipio: formData.municipio,
+                uf: formData.uf,
+                ativo: true,
+            });
+            router.push('/cadastros/instituicoes');
+        } catch (err) {
+            console.error('Erro ao salvar instituição:', err);
+            alert('Erro ao salvar instituição. Tente novamente.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleCancelar = () => {
@@ -150,23 +202,30 @@ export default function NovaInstituicaoPage() {
                                     </Label>
                                     <FieldTooltip content="Esfera de governo: Federal, Estadual, Municipal ou Distrital" />
                                 </div>
-                                <Select
-                                    value={formData.esfera}
-                                    onValueChange={(value) =>
-                                        setFormData({ ...formData, esfera: value as IInstituicao['esfera'] })
-                                    }
-                                >
-                                    <SelectTrigger className={errors.esfera ? 'border-red-500' : ''}>
-                                        <SelectValue placeholder="Selecione a esfera" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {ESFERAS.map((esfera) => (
-                                            <SelectItem key={esfera.value} value={esfera.value}>
-                                                {esfera.label}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                {loadingEsferas ? (
+                                    <div className="flex items-center gap-2 h-10">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        <span className="text-sm text-muted-foreground">Carregando...</span>
+                                    </div>
+                                ) : (
+                                    <Select
+                                        value={formData.esferaId}
+                                        onValueChange={(value) =>
+                                            setFormData({ ...formData, esferaId: value })
+                                        }
+                                    >
+                                        <SelectTrigger className={errors.esfera ? 'border-red-500' : ''}>
+                                            <SelectValue placeholder="Selecione a esfera" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {esferas.map((esfera) => (
+                                                <SelectItem key={esfera.id} value={esfera.id}>
+                                                    {esfera.nome}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                )}
                                 {errors.esfera && <p className="text-sm text-red-500">{errors.esfera}</p>}
                             </div>
                         </div>
@@ -324,6 +383,7 @@ export default function NovaInstituicaoPage() {
                 onCancelar={handleCancelar}
                 onLimpar={handleLimpar}
                 mode="create"
+                isLoading={saving}
             />
         </div>
     );

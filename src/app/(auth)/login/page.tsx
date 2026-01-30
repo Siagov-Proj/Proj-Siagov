@@ -6,15 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { useAuthStore } from '@/hooks/useAuth';
 import { useThemeStore } from '@/hooks/useTheme';
 import { Moon, Sun, Eye, EyeOff, Loader2, Lock, CreditCard } from 'lucide-react';
 import Link from 'next/link';
 import { maskCpf } from '@/utils/masks';
+import { loginWithCpf } from '@/app/auth/actions';
 
 export default function LoginPage() {
-    const router = useRouter();
-    const login = useAuthStore((state) => state.login);
     const { isDark, toggleTheme } = useThemeStore();
 
     const [cpf, setCpf] = useState('');
@@ -23,41 +21,30 @@ export default function LoginPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
-    const handleLogin = async (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setError('');
         setIsLoading(true);
 
-        // Simulação de login - substituir por chamada API real
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        const formData = new FormData();
+        const rawCpf = cpf.replace(/\D/g, '');
+        formData.set('cpf', rawCpf);
+        formData.set('password', senha);
 
-        if (cpf && senha) {
-            // Mock user data based on CPF
-            const mockUser = {
-                id: '1',
-                nome: 'Administrador Sistema',
-                email: 'admin@siagov.br',
-                cpf: cpf.replace(/\D/g, ''),
-                instituicaoId: '1',
-                orgaoId: '1',
-                unidadeGestoraId: '1',
-                setorId: '1',
-                cargoId: '1',
-                permissoes: ['admin'],
-            };
-
-            login(mockUser, 'mock-token-12345');
-            router.push('/dashboard');
-        } else {
-            setError('CPF e senha são obrigatórios');
+        try {
+            const result = await loginWithCpf(formData);
+            if (result?.error) {
+                setError(result.error);
+                setIsLoading(false);
+            }
+        } catch (err) {
+            setError('Ocorreu um erro ao fazer login.');
+            setIsLoading(false);
         }
-
-        setIsLoading(false);
     };
 
     return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 p-4 font-sans">
-            {/* Theme Toggle */}
             <Button
                 variant="ghost"
                 size="icon"
@@ -67,7 +54,6 @@ export default function LoginPage() {
                 {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
             </Button>
 
-            {/* Header Outside Card */}
             <div className="text-center mb-8 space-y-2">
                 <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
                     Bem-vindo ao SIAGOV
@@ -82,7 +68,7 @@ export default function LoginPage() {
                     <CardTitle className="text-xl font-semibold text-left">Acesse sua conta</CardTitle>
                 </CardHeader>
 
-                <form onSubmit={handleLogin}>
+                <form onSubmit={handleSubmit}>
                     <CardContent className="space-y-4">
                         {error && (
                             <div className="p-3 text-sm text-red-500 bg-red-50 dark:bg-red-950/30 rounded-md border border-red-100 dark:border-red-900">
@@ -169,13 +155,12 @@ export default function LoginPage() {
                         <div className="w-full p-4 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-100 dark:border-blue-900/20 text-sm text-blue-800 dark:text-blue-200">
                             <p className="font-semibold mb-1">Credenciais de demonstração:</p>
                             <p>Usuário (CPF): 123.456.789-00</p>
-                            <p>Senha: 1234</p>
+                            <p>Senha: 123456</p>
                         </div>
                     </CardFooter>
                 </form>
             </Card>
 
-            {/* Footer */}
             <div className="mt-8 text-center text-sm text-muted-foreground">
                 <p>© 2024 SIAGOV - Todos os direitos reservados</p>
             </div>

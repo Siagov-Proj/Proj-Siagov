@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { chamadosService, IChamadoDB } from '@/services/api/chamadosService';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,77 +11,57 @@ import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Send, MessageSquare, Clock, User, AlertCircle } from 'lucide-react';
 import { formatDateTimeBR } from '@/utils/formatters';
 
-// Tipos
-interface IMensagem {
-    id: string;
-    usuario: string;
-    conteudo: string;
-    criadoEm: Date;
-    isAdmin: boolean;
-}
-
-interface IChamadoDetalhe {
-    id: string;
-    protocolo: string;
-    assunto: string;
-    categoria: 'Bug' | 'Dúvida' | 'Melhoria';
-    status: 'Aberto' | 'Em Atendimento' | 'Aguardando Resposta' | 'Resolvido' | 'Fechado';
-    prioridade: 'Alta' | 'Média' | 'Baixa';
-    criadoPor: string;
-    criadoEm: Date;
-    slaRestante?: string;
-    mensagens: IMensagem[];
-}
-
-// Dados mock
-const mockChamado: IChamadoDetalhe = {
-    id: '1',
-    protocolo: '2025-001',
-    assunto: 'Erro na geração de documento',
-    categoria: 'Bug',
-    status: 'Aberto',
-    prioridade: 'Alta',
-    criadoPor: 'João Silva',
-    criadoEm: new Date('2025-01-29T10:30:00'),
-    slaRestante: '2h restantes',
-    mensagens: [
-        {
-            id: '1',
-            usuario: 'João Silva',
-            conteudo: 'Ao tentar gerar um documento do tipo Parecer, o sistema apresentou erro após 30 segundos de processamento. A mensagem exibida foi "Erro interno do servidor". Isso aconteceu 3 vezes consecutivas.',
-            criadoEm: new Date('2025-01-29T10:30:00'),
-            isAdmin: false,
-        },
-        {
-            id: '2',
-            usuario: 'Suporte SIAGOV',
-            conteudo: 'Olá João, obrigado por reportar o problema. Estamos analisando o erro e retornaremos em breve com uma solução.',
-            criadoEm: new Date('2025-01-29T11:00:00'),
-            isAdmin: true,
-        },
-    ],
-};
+// (Mock data removed)
 
 export default function DetalheChamadoPage() {
     const params = useParams();
+    const id = params.id as string;
+    const [chamado, setChamado] = useState<IChamadoDB | null>(null);
+    const [mensagens, setMensagens] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
     const [novaMensagem, setNovaMensagem] = useState('');
     const [enviando, setEnviando] = useState(false);
 
-    // Em produção, buscaria o chamado pelo ID
-    const chamado = mockChamado;
+    const carregarDados = useCallback(async () => {
+        if (!id) return;
+        setLoading(true);
+        try {
+            const [chamadoData, msgData] = await Promise.all([
+                chamadosService.obterPorId(id),
+                chamadosService.listarMensagens(id)
+            ]);
+            setChamado(chamadoData);
+            setMensagens(msgData);
+        } catch (error) {
+            console.error('Erro ao carregar detalhe:', error);
+        } finally {
+            setLoading(false);
+        }
+    }, [id]);
+
+    useEffect(() => {
+        carregarDados();
+    }, [carregarDados]);
 
     const enviarMensagem = async () => {
-        if (!novaMensagem.trim()) return;
+        if (!novaMensagem.trim() || !id) return;
 
         setEnviando(true);
-
-        // Simula envio
-        await new Promise((resolve) => setTimeout(resolve, 500));
-
-        console.log('Mensagem enviada:', novaMensagem);
-        setNovaMensagem('');
-        setEnviando(false);
+        try {
+            await chamadosService.enviarMensagem(id, novaMensagem, 'Usuario Teste'); // TODO: Get from Auth
+            setNovaMensagem('');
+            // Refresh messages
+            const msgs = await chamadosService.listarMensagens(id);
+            setMensagens(msgs);
+        } catch (error) {
+            console.error('Erro ao enviar mensagem:', error);
+        } finally {
+            setEnviando(false);
+        }
     };
+
+    if (loading) return <div className="p-8 text-center text-muted-foreground">Carregando detalhes do chamado...</div>;
+    if (!chamado) return <div className="p-8 text-center text-red-500">Chamado não encontrado.</div>;
 
     const obterCorStatus = (status: string) => {
         switch (status) {
@@ -137,20 +118,20 @@ export default function DetalheChamadoPage() {
                             </CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
-                            {chamado.mensagens.map((msg) => (
+                            {mensagens.map((msg) => (
                                 <div
                                     key={msg.id}
-                                    className={`p-4 rounded-lg ${msg.isAdmin
-                                            ? 'bg-primary/10 border-l-4 border-primary'
-                                            : 'bg-muted'
+                                    className={`p-4 rounded-lg ${msg.tipo === 'suporte'
+                                        ? 'bg-primary/10 border-l-4 border-primary'
+                                        : 'bg-muted'
                                         }`}
                                 >
                                     <div className="flex items-start justify-between mb-2">
                                         <div className="flex items-center gap-2">
                                             <User className="h-4 w-4 text-muted-foreground" />
                                             <span className="font-medium text-sm">
-                                                {msg.usuario}
-                                                {msg.isAdmin && (
+                                                {msg.autor}
+                                                {msg.tipo === 'suporte' && (
                                                     <Badge variant="secondary" className="ml-2">
                                                         Suporte
                                                     </Badge>
@@ -158,11 +139,11 @@ export default function DetalheChamadoPage() {
                                             </span>
                                         </div>
                                         <span className="text-xs text-muted-foreground">
-                                            {formatDateTimeBR(msg.criadoEm)}
+                                            {formatDateTimeBR(msg.created_at)}
                                         </span>
                                     </div>
                                     <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                                        {msg.conteudo}
+                                        {msg.mensagem}
                                     </p>
                                 </div>
                             ))}
@@ -215,19 +196,19 @@ export default function DetalheChamadoPage() {
                             </div>
                             <div>
                                 <p className="text-sm text-muted-foreground mb-1">Aberto por</p>
-                                <p>{chamado.criadoPor}</p>
+                                <p>{chamado.criado_por}</p>
                             </div>
                             <div>
                                 <p className="text-sm text-muted-foreground mb-1">Data de Abertura</p>
-                                <p>{formatDateTimeBR(chamado.criadoEm)}</p>
+                                <p>{formatDateTimeBR(chamado.data_abertura)}</p>
                             </div>
-                            {chamado.slaRestante && (
+                            {chamado.sla_restante && (
                                 <div className="p-3 bg-orange-50 dark:bg-orange-950 rounded-lg border border-orange-200 dark:border-orange-800">
                                     <div className="flex items-center gap-2 text-orange-600 dark:text-orange-400">
                                         <AlertCircle className="h-4 w-4" />
                                         <span className="text-sm font-medium">SLA</span>
                                     </div>
-                                    <p className="text-sm mt-1">{chamado.slaRestante}</p>
+                                    <p className="text-sm mt-1">{chamado.sla_restante}</p>
                                 </div>
                             )}
                         </CardContent>

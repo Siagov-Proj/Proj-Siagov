@@ -1,0 +1,104 @@
+⚠️  Node.js 18 and below are deprecated and will no longer be supported in future versions of @supabase/supabase-js. Please upgrade to Node.js 20 or later. For more information, visit: https://github.com/orgs/supabase/discussions/37217
+
+=== Testing Module: Esferas ===
+✅ Create: Success (ID: ebb26c18-5fda-4de2-adad-8a599cd33f7e)
+✅ Read: Success
+✅ Update: Success
+✅ Delete (Logical): Success
+✅ Verify Deletion: Success
+
+=== Testing Module: Instituicoes ===
+✅ Create: Success (ID: ba6da2ea-ecf7-4456-b7f1-ec4a1420e216)
+✅ Read: Success
+✅ Update: Success
+✅ Delete (Logical): Success
+✅ Verify Deletion: Success
+
+=== Testing Module: Orgaos ===
+✅ Create: Success (ID: 66681be0-7dd7-48b1-96f5-542d51df744b)
+✅ Read: Success
+✅ Update: Success
+✅ Delete (Logical): Success
+✅ Verify Deletion: Success
+
+=== Testing Module: Unidades Gestoras ===
+✅ Create: Success (ID: 09a0b6fc-eab2-4c51-9906-ae2040858dcb)
+✅ Read: Success
+✅ Update: Success
+✅ Delete (Logical): Success
+✅ Verify Deletion: Success
+
+=== Testing Module: Setores ===
+✅ Create: Success (ID: a6a4b942-5c7c-4e07-85bb-cffbb8295643)
+✅ Read: Success
+✅ Update: Success
+✅ Delete (Logical): Success
+✅ Verify Deletion: Success
+
+=== Testing Module: Cargos ===
+✅ Create: Success (ID: 9aadbc15-8634-47c0-ae9b-23ca91b6ef73)
+✅ Read: Success
+✅ Update: Success
+✅ Delete (Logical): Success
+✅ Verify Deletion: Success
+
+=== Testing Module: Usuarios ===
+✅ Create: Success (ID: 637e374e-7630-43c3-9730-29b72cdc6fcd)
+✅ Read: Success
+✅ Update: Success
+✅ Delete (Logical): Success
+✅ Verify Deletion: Success
+
+=== Testing Module: Exercicios ===
+✅ Create: Success (ID: 2217baa8-03b8-4861-b8d5-1b15b9dd00ff)
+✅ Read: Success
+✅ Update: Success
+✅ Delete (Logical): Success
+✅ Verify Deletion: Success
+
+=== Testing Module: Bancos ===
+✅ Create: Success (ID: f4b6fb08-cea2-4170-8a69-a3efd2738ea7)
+✅ Read: Success
+✅ Update: Success
+✅ Delete (Logical): Success
+✅ Verify Deletion: Success
+
+=== Testing Module: Agencias ===
+✅ Create: Success (ID: f6f965ec-4832-4b71-bd2e-3fbd12591a60)
+✅ Read: Success
+✅ Update: Success
+✅ Delete (Logical): Success
+✅ Verify Deletion: Success
+
+=== Testing Module: Categorias Doc ===
+✅ Create: Success (ID: da6bae29-6615-444a-96ff-924735e1915a)
+✅ Read: Success
+✅ Update: Success
+✅ Delete (Logical): Success
+✅ Verify Deletion: Success
+
+=== Testing Module: Credores ===
+✅ Create: Success (ID: a4670c09-90a2-48cf-adf4-a02511251e4c)
+✅ Read: Success
+✅ Update: Success
+✅ Delete (Logical): Success
+✅ Verify Deletion: Success
+
+
+========== AUDIT SUMMARY ==========
+┌───────────────────┬────────┐
+│      (index)      │ Values │
+├───────────────────┼────────┤
+│      Esferas      │  true  │
+│   Instituicoes    │  true  │
+│      Orgaos       │  true  │
+│ Unidades Gestoras │  true  │
+│      Setores      │  true  │
+│      Cargos       │  true  │
+│     Usuarios      │  true  │
+│    Exercicios     │  true  │
+│      Bancos       │  true  │
+│     Agencias      │  true  │
+│  Categorias Doc   │  true  │
+│     Credores      │  true  │
+└───────────────────┴────────┘

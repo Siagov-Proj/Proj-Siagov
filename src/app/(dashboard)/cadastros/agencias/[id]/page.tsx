@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -17,37 +17,8 @@ import { ActionBar } from '@/components/ui/action-bar';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { maskCep, maskTelefone, maskCodigoComZeros, maskCnpj } from '@/utils/masks';
 import { ESTADOS_BRASIL, FIELD_LIMITS } from '@/utils/constants';
-import type { IAgencia } from '@/types';
-import { ArrowLeft } from 'lucide-react';
-
-// Mock de bancos
-const mockBancos = [
-    { id: '1', codigo: '001', nome: 'Banco do Brasil S.A.' },
-    { id: '2', codigo: '104', nome: 'Caixa Econômica Federal' },
-    { id: '3', codigo: '341', nome: 'Itaú Unibanco S.A.' },
-];
-
-const mockAgencias: IAgencia[] = [
-    {
-        id: '1',
-        bancoId: '1',
-        codigoBanco: '001',
-        codigo: '0001',
-        digitoVerificador: '5',
-        nome: 'Agência Central',
-        nomeAbreviado: 'AG. CENTRAL',
-        cnpj: '00.000.000/0001-91',
-        praca: 'São Paulo',
-        endereco: 'Av. Paulista, 1000',
-        municipio: 'São Paulo',
-        uf: 'SP',
-        telefone: '(11) 3000-0000',
-        gerente: 'João da Silva',
-        ativo: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-    },
-];
+import { ArrowLeft, Loader2 } from 'lucide-react';
+import { agenciasService, bancosService, IBancoDB } from '@/services/api';
 
 const emptyFormData = {
     bancoId: '',
@@ -75,35 +46,59 @@ export default function EditarAgenciaPage() {
     const [originalData, setOriginalData] = useState(emptyFormData);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [bancos, setBancos] = useState<IBancoDB[]>([]);
+
+    const carregarDados = useCallback(async () => {
+        try {
+            setLoading(true);
+            const id = params.id as string;
+
+            // Carrega bancos e agência em paralelo
+            const [listaBancos, agencia] = await Promise.all([
+                bancosService.listar(),
+                agenciasService.buscarPorId(id),
+            ]);
+
+            setBancos(listaBancos);
+
+            if (agencia) {
+                const data = {
+                    bancoId: agencia.banco_id || '',
+                    codigo: agencia.codigo,
+                    digitoVerificador: agencia.digito_verificador || '',
+                    nome: agencia.nome,
+                    nomeAbreviado: agencia.nome_abreviado || '',
+                    cnpj: agencia.cnpj || '',
+                    praca: agencia.praca || '',
+                    gerente: agencia.gerente || '',
+                    cep: agencia.cep || '',
+                    endereco: agencia.endereco || '',
+                    numero: agencia.numero || '',
+                    bairro: agencia.bairro || '',
+                    municipio: agencia.municipio || '',
+                    uf: agencia.uf || '',
+                    telefone: agencia.telefone || '',
+                    email: agencia.email || '',
+                };
+                setFormData(data);
+                setOriginalData(data);
+            } else {
+                alert('Agência não encontrada');
+                router.push('/cadastros/agencias');
+            }
+        } catch (err) {
+            console.error('Erro ao carregar dados:', err);
+            alert('Erro ao carregar dados. Tente novamente.');
+            router.push('/cadastros/agencias');
+        } finally {
+            setLoading(false);
+        }
+    }, [params.id, router]);
 
     useEffect(() => {
-        const id = params.id as string;
-        const found = mockAgencias.find(a => a.id === id);
-
-        if (found) {
-            const data = {
-                bancoId: found.bancoId,
-                codigo: found.codigo,
-                digitoVerificador: found.digitoVerificador || '',
-                nome: found.nome,
-                nomeAbreviado: found.nomeAbreviado || '',
-                cnpj: found.cnpj || '',
-                praca: found.praca || '',
-                gerente: found.gerente || '',
-                cep: found.cep || '',
-                endereco: found.endereco || '',
-                numero: found.numero || '',
-                bairro: found.bairro || '',
-                municipio: found.municipio || '',
-                uf: found.uf || '',
-                telefone: found.telefone || '',
-                email: found.email || '',
-            };
-            setFormData(data);
-            setOriginalData(data);
-        }
-        setLoading(false);
-    }, [params.id]);
+        carregarDados();
+    }, [carregarDados]);
 
     const validate = (): boolean => {
         const newErrors: Record<string, string> = {};
@@ -116,10 +111,36 @@ export default function EditarAgenciaPage() {
         return Object.keys(newErrors).length === 0;
     };
 
-    const handleSalvar = () => {
+    const handleSalvar = async () => {
         if (!validate()) return;
-        console.log('Atualizando agência:', params.id, formData);
-        router.push('/cadastros/agencias');
+
+        try {
+            setSaving(true);
+            await agenciasService.atualizar(params.id as string, {
+                banco_id: formData.bancoId,
+                codigo: formData.codigo,
+                digito_verificador: formData.digitoVerificador,
+                nome: formData.nome,
+                nome_abreviado: formData.nomeAbreviado,
+                cnpj: formData.cnpj,
+                praca: formData.praca,
+                gerente: formData.gerente,
+                cep: formData.cep,
+                endereco: formData.endereco,
+                numero: formData.numero,
+                bairro: formData.bairro,
+                municipio: formData.municipio,
+                uf: formData.uf,
+                telefone: formData.telefone,
+                email: formData.email,
+            });
+            router.push('/cadastros/agencias');
+        } catch (err) {
+            console.error('Erro ao atualizar agência:', err);
+            alert('Erro ao atualizar agência. Tente novamente.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleCancelar = () => {
@@ -131,7 +152,13 @@ export default function EditarAgenciaPage() {
         setErrors({});
     };
 
-    if (loading) return <div>Carregando...</div>;
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -171,7 +198,7 @@ export default function EditarAgenciaPage() {
                                         <SelectValue placeholder="Selecione o banco" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {mockBancos.map((banco) => (
+                                        {bancos.map((banco) => (
                                             <SelectItem key={banco.id} value={banco.id}>
                                                 {banco.codigo} - {banco.nome}
                                             </SelectItem>
@@ -397,7 +424,9 @@ export default function EditarAgenciaPage() {
                 onCancelar={handleCancelar}
                 onLimpar={handleLimpar}
                 mode="edit"
+                isLoading={saving}
             />
         </div>
     );
 }
+

@@ -1,0 +1,23 @@
+⚠️  Node.js 18 and below are deprecated and will no longer be supported in future versions of @supabase/supabase-js. Please upgrade to Node.js 20 or later. For more information, visit: https://github.com/orgs/supabase/discussions/37217
+--- STARTING FULL E2E (LOGIN + CHAMADOS) ---
+
+[PART 1] Testing Authentication Flow
+1.1 Lookup Email for CPF: 123.456.789-00
+   SUCCESS: Found email admin@siagov.com
+1.2 Attempting Sign In
+   FAILED: Sign In Error Email not confirmed
+
+[PART 2] Testing Chamados Module
+   Warning: Running Chamados tests as MOCK USER (Auth failed previously)
+2.1 Create Chamado
+   SUCCESS: Created ID 670a3107-093a-4584-8867-633e4584bfb8
+2.2 List Chamados
+   SUCCESS: Found in list
+2.3 Update (Edit)
+   SUCCESS: Status updated to Resolvido
+2.4 Messaging
+   SUCCESS: Message sent and retrieved
+2.5 Logical Delete
+   FAILED: Chamados Module Test chamadosService.excluirLogico is not a function
+
+--- TEST SUITE FAILED ---

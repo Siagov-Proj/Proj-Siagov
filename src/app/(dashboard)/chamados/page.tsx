@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,87 +29,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Plus, Search, Eye, MessageSquare, Clock, CheckCircle, AlertCircle, HelpCircle } from 'lucide-react';
 import { formatDateBR } from '@/utils/formatters';
-
-// Tipos
-interface IChamado {
-    id: string;
-    protocolo: string;
-    assunto: string;
-    categoria: 'Bug' | 'Dúvida' | 'Melhoria';
-    status: 'Aberto' | 'Em Atendimento' | 'Aguardando Resposta' | 'Resolvido' | 'Fechado';
-    prioridade: 'Alta' | 'Média' | 'Baixa';
-    criadoPor: string;
-    criadoEm: Date;
-    atualizadoEm: Date;
-    slaRestante?: string;
-    mensagens: number;
-}
-
-// Dados mock
-const mockChamados: IChamado[] = [
-    {
-        id: '1',
-        protocolo: '2025-001',
-        assunto: 'Erro na geração de documento',
-        categoria: 'Bug',
-        status: 'Aberto',
-        prioridade: 'Alta',
-        criadoPor: 'João Silva',
-        criadoEm: new Date('2025-01-29T10:30:00'),
-        atualizadoEm: new Date('2025-01-29T10:30:00'),
-        slaRestante: '2h',
-        mensagens: 1,
-    },
-    {
-        id: '2',
-        protocolo: '2025-002',
-        assunto: 'Dúvida sobre tramitação de processos',
-        categoria: 'Dúvida',
-        status: 'Em Atendimento',
-        prioridade: 'Média',
-        criadoPor: 'Maria Santos',
-        criadoEm: new Date('2025-01-28T14:00:00'),
-        atualizadoEm: new Date('2025-01-29T09:15:00'),
-        slaRestante: '4h',
-        mensagens: 3,
-    },
-    {
-        id: '3',
-        protocolo: '2025-003',
-        assunto: 'Sugestão de melhoria no dashboard',
-        categoria: 'Melhoria',
-        status: 'Aguardando Resposta',
-        prioridade: 'Baixa',
-        criadoPor: 'Carlos Oliveira',
-        criadoEm: new Date('2025-01-27T16:45:00'),
-        atualizadoEm: new Date('2025-01-28T11:00:00'),
-        mensagens: 5,
-    },
-    {
-        id: '4',
-        protocolo: '2025-004',
-        assunto: 'Sistema lento ao carregar processos',
-        categoria: 'Bug',
-        status: 'Resolvido',
-        prioridade: 'Alta',
-        criadoPor: 'Ana Costa',
-        criadoEm: new Date('2025-01-25T08:00:00'),
-        atualizadoEm: new Date('2025-01-26T15:30:00'),
-        mensagens: 8,
-    },
-    {
-        id: '5',
-        protocolo: '2025-005',
-        assunto: 'Como configurar notificações?',
-        categoria: 'Dúvida',
-        status: 'Fechado',
-        prioridade: 'Baixa',
-        criadoPor: 'Pedro Almeida',
-        criadoEm: new Date('2025-01-20T10:00:00'),
-        atualizadoEm: new Date('2025-01-21T14:00:00'),
-        mensagens: 4,
-    },
-];
+import { chamadosService, IChamadoDB } from '@/services/api/chamadosService';
 
 const CATEGORIAS = [
     { value: 'todos', label: 'Todas as Categorias' },
@@ -128,70 +48,74 @@ const STATUS = [
 ];
 
 export default function ChamadosPage() {
+    const [chamados, setChamados] = useState<IChamadoDB[]>([]);
+    const [loading, setLoading] = useState(true);
     const [termoBusca, setTermoBusca] = useState('');
     const [filtroCategoria, setFiltroCategoria] = useState('todos');
     const [filtroStatus, setFiltroStatus] = useState('todos');
 
+    const carregarChamados = useCallback(async () => {
+        setLoading(true);
+        try {
+            const data = await chamadosService.listar({
+                termo: termoBusca,
+                categoria: filtroCategoria,
+                status: filtroStatus
+            });
+            setChamados(data);
+        } catch (error) {
+            console.error('Erro ao carregar chamados:', error);
+        } finally {
+            setLoading(false);
+        }
+    }, [termoBusca, filtroCategoria, filtroStatus]);
+
+    useEffect(() => {
+        carregarChamados();
+    }, [carregarChamados]);
+
     // Estatísticas
     const stats = {
-        total: mockChamados.length,
-        abertos: mockChamados.filter((c) => c.status === 'Aberto').length,
-        emAtendimento: mockChamados.filter((c) => c.status === 'Em Atendimento').length,
-        resolvidos: mockChamados.filter((c) => c.status === 'Resolvido' || c.status === 'Fechado').length,
+        total: chamados.length,
+        abertos: chamados.filter((c) => c.status === 'Aberto').length,
+        emAtendimento: chamados.filter((c) => c.status === 'Em Atendimento').length,
+        resolvidos: chamados.filter((c) => c.status === 'Resolvido' || c.status === 'Fechado').length,
     };
 
+    // (Helper functions remain)
+
     // Filtrar chamados
-    const chamadosFiltrados = mockChamados.filter((chamado) => {
-        const matchesBusca =
-            chamado.assunto.toLowerCase().includes(termoBusca.toLowerCase()) ||
-            chamado.protocolo.includes(termoBusca);
-        const matchesCategoria =
-            filtroCategoria === 'todos' || chamado.categoria === filtroCategoria;
-        const matchesStatus =
-            filtroStatus === 'todos' || chamado.status === filtroStatus;
-        return matchesBusca && matchesCategoria && matchesStatus;
-    });
+    // const chamadosFiltrados = mockChamados.filter((chamado) => { ... });
+    // Note: Filtering is now handled by the backend service.
+    // 'chamados' state already contains filtered data.
+    const chamadosFiltrados = chamados;
 
     const obterCorStatus = (status: string) => {
         switch (status) {
-            case 'Aberto':
-                return 'destructive';
-            case 'Em Atendimento':
-                return 'default';
-            case 'Aguardando Resposta':
-                return 'secondary';
-            case 'Resolvido':
-                return 'outline';
-            case 'Fechado':
-                return 'outline';
-            default:
-                return 'outline';
+            case 'Aberto': return 'destructive';
+            case 'Em Atendimento': return 'default';
+            case 'Aguardando Resposta': return 'secondary';
+            case 'Resolvido': return 'outline';
+            case 'Fechado': return 'outline';
+            default: return 'outline'; // Fallback
         }
     };
 
     const obterCorCategoria = (categoria: string) => {
         switch (categoria) {
-            case 'Bug':
-                return 'destructive';
-            case 'Dúvida':
-                return 'secondary';
-            case 'Melhoria':
-                return 'default';
-            default:
-                return 'outline';
+            case 'Bug': return 'destructive';
+            case 'Dúvida': return 'secondary';
+            case 'Melhoria': return 'default';
+            default: return 'outline';
         }
     };
 
     const obterIconeCategoria = (categoria: string) => {
         switch (categoria) {
-            case 'Bug':
-                return <AlertCircle className="h-4 w-4" />;
-            case 'Dúvida':
-                return <HelpCircle className="h-4 w-4" />;
-            case 'Melhoria':
-                return <MessageSquare className="h-4 w-4" />;
-            default:
-                return <MessageSquare className="h-4 w-4" />;
+            case 'Bug': return <AlertCircle className="h-4 w-4" />;
+            case 'Dúvida': return <HelpCircle className="h-4 w-4" />;
+            case 'Melhoria': return <MessageSquare className="h-4 w-4" />;
+            default: return <MessageSquare className="h-4 w-4" />;
         }
     };
 
@@ -215,6 +139,8 @@ export default function ChamadosPage() {
                     </Link>
                 </Button>
             </div>
+
+            {/* ... (Rest of UI) ... */}
 
             {/* Estatísticas */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
@@ -341,7 +267,7 @@ export default function ChamadosPage() {
                                                 <div className="flex flex-col">
                                                     <span className="font-medium">{chamado.assunto}</span>
                                                     <span className="text-sm text-muted-foreground">
-                                                        Por {chamado.criadoPor} • {formatDateBR(chamado.criadoEm)}
+                                                        Por {chamado.criado_por} • {formatDateBR(chamado.data_abertura)}
                                                     </span>
                                                 </div>
                                             </TableCell>
@@ -359,10 +285,10 @@ export default function ChamadosPage() {
                                                 </Badge>
                                             </TableCell>
                                             <TableCell>
-                                                {chamado.slaRestante ? (
+                                                {chamado.sla_restante ? (
                                                     <span className="flex items-center gap-1 text-orange-600">
                                                         <Clock className="h-4 w-4" />
-                                                        {chamado.slaRestante}
+                                                        {chamado.sla_restante}
                                                     </span>
                                                 ) : (
                                                     <span className="text-muted-foreground">-</span>
@@ -371,7 +297,7 @@ export default function ChamadosPage() {
                                             <TableCell className="text-center">
                                                 <span className="flex items-center justify-center gap-1">
                                                     <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                                                    {chamado.mensagens}
+                                                    {chamado.mensagens_count || 0}
                                                 </span>
                                             </TableCell>
                                             <TableCell>

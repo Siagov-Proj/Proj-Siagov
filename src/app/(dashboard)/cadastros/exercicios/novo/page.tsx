@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,16 +15,11 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ActionBar } from '@/components/ui/action-bar';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
-import { ArrowLeft, Calendar } from 'lucide-react';
+import { ArrowLeft, Calendar, Loader2 } from 'lucide-react';
+import { exerciciosService, instituicoesService, IInstituicaoDB } from '@/services/api';
 
 // Ano corrente
 const ANO_CORRENTE = new Date().getFullYear();
-
-// Mock de instituições
-const mockInstituicoes = [
-    { id: '1', nome: 'Prefeitura Municipal de São Paulo' },
-    { id: '2', nome: 'Governo do Estado de São Paulo' },
-];
 
 const formDataVazio = {
     ano: ANO_CORRENTE,
@@ -38,6 +33,26 @@ export default function NovoExercicioPage() {
     const router = useRouter();
     const [formData, setFormData] = useState(formDataVazio);
     const [erros, setErros] = useState<Record<string, string>>({});
+    const [instituicoes, setInstituicoes] = useState<IInstituicaoDB[]>([]);
+    const [loadingInstituicoes, setLoadingInstituicoes] = useState(true);
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        carregarInstituicoes();
+    }, []);
+
+    const carregarInstituicoes = async () => {
+        try {
+            setLoadingInstituicoes(true);
+            const data = await instituicoesService.listar();
+            setInstituicoes(data);
+        } catch (error) {
+            console.error('Erro ao carregar instituições:', error);
+            alert('Erro ao carregar instituições. Tente novamente.');
+        } finally {
+            setLoadingInstituicoes(false);
+        }
+    };
 
     const validar = (): boolean => {
         const novosErros: Record<string, string> = {};
@@ -63,10 +78,25 @@ export default function NovoExercicioPage() {
         return Object.keys(novosErros).length === 0;
     };
 
-    const handleSalvar = () => {
+    const handleSalvar = async () => {
         if (!validar()) return;
-        console.log('Salvando novo exercício:', formData);
-        router.push('/cadastros/exercicios');
+
+        try {
+            setSaving(true);
+            await exerciciosService.criar({
+                ano: formData.ano,
+                instituicao_id: formData.instituicaoId,
+                data_abertura: formData.dataAbertura,
+                data_fechamento: formData.dataFechamento || undefined,
+                ativo: formData.ativo,
+            });
+            router.push('/cadastros/exercicios');
+        } catch (error) {
+            console.error('Erro ao criar exercício:', error);
+            alert('Erro ao criar exercício. Verifique se já existe um exercício para este ano e instituição.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleCancelar = () => {
@@ -129,21 +159,28 @@ export default function NovoExercicioPage() {
                                     </Label>
                                     <FieldTooltip content="Instituição vinculada ao exercício" />
                                 </div>
-                                <Select
-                                    value={formData.instituicaoId}
-                                    onValueChange={(valor) => setFormData({ ...formData, instituicaoId: valor })}
-                                >
-                                    <SelectTrigger className={erros.instituicaoId ? 'border-red-500' : ''}>
-                                        <SelectValue placeholder="Selecione a instituição" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {mockInstituicoes.map((inst) => (
-                                            <SelectItem key={inst.id} value={inst.id}>
-                                                {inst.nome}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                {loadingInstituicoes ? (
+                                    <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted">
+                                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                        <span className="text-sm text-muted-foreground">Carregando...</span>
+                                    </div>
+                                ) : (
+                                    <Select
+                                        value={formData.instituicaoId}
+                                        onValueChange={(valor) => setFormData({ ...formData, instituicaoId: valor })}
+                                    >
+                                        <SelectTrigger className={erros.instituicaoId ? 'border-red-500' : ''}>
+                                            <SelectValue placeholder="Selecione a instituição" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {instituicoes.map((inst) => (
+                                                <SelectItem key={inst.id} value={inst.id}>
+                                                    {inst.codigo} - {inst.nome}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                )}
                                 {erros.instituicaoId && <p className="text-sm text-red-500">{erros.instituicaoId}</p>}
                             </div>
 
@@ -205,6 +242,7 @@ export default function NovoExercicioPage() {
                 onCancelar={handleCancelar}
                 onLimpar={handleLimpar}
                 mode="create"
+                isLoading={saving}
             />
         </div>
     );

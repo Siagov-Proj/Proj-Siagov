@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -15,40 +15,8 @@ import {
 } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Search, Pencil, Trash2, Users, ArrowLeft } from 'lucide-react';
-import type { IUsuario } from '@/types';
-
-// Mock data
-const mockCargos = [
-    { id: '1', setorId: '1', nome: 'Analista de Licitações' },
-    { id: '2', setorId: '2', nome: 'Analista de RH' },
-];
-
-const usuariosIniciais: IUsuario[] = [
-    {
-        id: '1',
-        codigo: '001',
-        nome: 'João da Silva',
-        emailInstitucional: 'joao.silva@gov.br',
-        emailPessoal: 'joao@gmail.com',
-        telefone01: '(61) 99999-9999',
-        telefoneWhatsApp: '(61) 99999-9999',
-        cpf: '123.456.789-00',
-        nomeCredor: 'João da Silva (Credor)',
-        matricula: '123456',
-        vinculo: 'Efetivo',
-        instituicaoId: '1',
-        orgaoId: '1',
-        unidadeGestoraId: '1',
-        ugOrigem: '1',
-        setorId: '1',
-        cargoId: '1',
-        permissoes: ['admin'],
-        ativo: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-    },
-];
+import { Plus, Search, Pencil, Trash2, Users, ArrowLeft, Loader2 } from 'lucide-react';
+import { usuariosService, IUsuarioDB } from '@/services/api';
 
 const PERFIS_USUARIO = [
     { value: 'admin', label: 'Administrador' },
@@ -59,15 +27,29 @@ const PERFIS_USUARIO = [
 
 export default function UsuariosPage() {
     const router = useRouter();
-    const [usuarios, setUsuarios] = useState<IUsuario[]>(usuariosIniciais);
+    const [usuarios, setUsuarios] = useState<IUsuarioDB[]>([]);
     const [termoBusca, setTermoBusca] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [deleting, setDeleting] = useState<string | null>(null);
 
-    const usuariosFiltrados = usuarios.filter(
-        (user) =>
-            user.nome.toLowerCase().includes(termoBusca.toLowerCase()) ||
-            user.emailInstitucional.toLowerCase().includes(termoBusca.toLowerCase()) ||
-            user.cpf.includes(termoBusca)
-    );
+    const carregarUsuarios = useCallback(async () => {
+        try {
+            setLoading(true);
+            const dados = await usuariosService.listar(termoBusca);
+            setUsuarios(dados);
+        } catch (err) {
+            console.error('Erro ao carregar usuários:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, [termoBusca]);
+
+    useEffect(() => {
+        const debounce = setTimeout(() => {
+            carregarUsuarios();
+        }, 300);
+        return () => clearTimeout(debounce);
+    }, [carregarUsuarios]);
 
     const handleNovo = () => {
         router.push('/cadastros/usuarios/novo');
@@ -77,18 +59,24 @@ export default function UsuariosPage() {
         router.push(`/cadastros/usuarios/${id}`);
     };
 
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
         if (confirm('Tem certeza que deseja excluir este usuário?')) {
-            setUsuarios(usuarios.filter((u) => u.id !== id));
+            try {
+                setDeleting(id);
+                await usuariosService.excluir(id);
+                setUsuarios(usuarios.filter((u) => u.id !== id));
+            } catch (err) {
+                console.error('Erro ao excluir usuário:', err);
+                alert('Erro ao excluir usuário. Tente novamente.');
+            } finally {
+                setDeleting(null);
+            }
         }
     };
 
-    const obterNomeCargo = (id: string) => {
-        return mockCargos.find((c) => c.id === id)?.nome || '-';
-    };
-
-    const obterLabelPerfil = (permissoes: string[]) => {
-        const perfil = PERFIS_USUARIO.find((p) => permissoes?.includes(p.value));
+    const obterLabelPerfil = (permissoes: string[] | null | undefined): string => {
+        if (!permissoes || permissoes.length === 0) return 'Sem perfil';
+        const perfil = PERFIS_USUARIO.find((p) => permissoes.includes(p.value));
         return perfil?.label || 'Sem perfil';
     };
 
@@ -125,7 +113,7 @@ export default function UsuariosPage() {
                         <div>
                             <CardTitle>Lista de Usuários</CardTitle>
                             <CardDescription>
-                                {usuariosFiltrados.length} usuário(s) encontrado(s)
+                                {loading ? 'Carregando...' : `${usuarios.length} usuário(s) encontrado(s)`}
                             </CardDescription>
                         </div>
                         <div className="relative w-full sm:w-64">
@@ -140,66 +128,72 @@ export default function UsuariosPage() {
                     </div>
                 </CardHeader>
                 <CardContent>
-                    <div className="rounded-md border">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Nome / CPF</TableHead>
-                                    <TableHead>E-mail Institucional</TableHead>
-                                    <TableHead>Cargo / Lotação</TableHead>
-                                    <TableHead>Perfil</TableHead>
-                                    <TableHead className="w-24 text-center">Ações</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {usuariosFiltrados.length === 0 ? (
+                    {loading ? (
+                        <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : (
+                        <div className="rounded-md border">
+                            <Table>
+                                <TableHeader>
                                     <TableRow>
-                                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                                            Nenhum usuário encontrado
-                                        </TableCell>
+                                        <TableHead>Nome / CPF</TableHead>
+                                        <TableHead>E-mail Institucional</TableHead>
+                                        <TableHead>Vínculo</TableHead>
+                                        <TableHead>Perfil</TableHead>
+                                        <TableHead className="w-24 text-center">Ações</TableHead>
                                     </TableRow>
-                                ) : (
-                                    usuariosFiltrados.map((usuario) => (
-                                        <TableRow key={usuario.id}>
-                                            <TableCell>
-                                                <div className="flex flex-col">
-                                                    <span className="font-medium">{usuario.nome}</span>
-                                                    <span className="text-xs text-muted-foreground font-mono">{usuario.cpf}</span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="text-sm">{usuario.emailInstitucional}</TableCell>
-                                            <TableCell>
-                                                <div className="flex flex-col">
-                                                    <span className="text-sm">{obterNomeCargo(usuario.cargoId)}</span>
-                                                    <span className="text-xs text-muted-foreground">{usuario.vinculo}</span>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge variant="outline">
-                                                    {obterLabelPerfil(usuario.permissoes || [])}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center justify-center gap-1">
-                                                    <Button variant="ghost" size="icon" onClick={() => handleEdit(usuario.id)}>
-                                                        <Pencil className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => handleDelete(usuario.id)}
-                                                        className="text-red-500 hover:text-red-600"
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
+                                </TableHeader>
+                                <TableBody>
+                                    {usuarios.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                                                Nenhum usuário encontrado
                                             </TableCell>
                                         </TableRow>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
+                                    ) : (
+                                        usuarios.map((usuario) => (
+                                            <TableRow key={usuario.id}>
+                                                <TableCell>
+                                                    <div className="flex flex-col">
+                                                        <span className="font-medium">{usuario.nome}</span>
+                                                        <span className="text-xs text-muted-foreground font-mono">{usuario.cpf}</span>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-sm">{usuario.email_institucional || '-'}</TableCell>
+                                                <TableCell className="text-sm">{usuario.vinculo || '-'}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant="outline">
+                                                        {obterLabelPerfil(usuario.permissoes)}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        <Button variant="ghost" size="icon" onClick={() => handleEdit(usuario.id)}>
+                                                            <Pencil className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => handleDelete(usuario.id)}
+                                                            className="text-red-500 hover:text-red-600"
+                                                            disabled={deleting === usuario.id}
+                                                        >
+                                                            {deleting === usuario.id ? (
+                                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                            ) : (
+                                                                <Trash2 className="h-4 w-4" />
+                                                            )}
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>

@@ -1,0 +1,11 @@
+⚠️  Node.js 18 and below are deprecated and will no longer be supported in future versions of @supabase/supabase-js. Please upgrade to Node.js 20 or later. For more information, visit: https://github.com/orgs/supabase/discussions/37217
+Env loaded.
+--- STARTING CHAMADOS E2E QA ---
+1. Creating Chamado...
+--- QA FAILED ---
+{
+  code: 'PGRST205',
+  details: null,
+  hint: "Perhaps you meant the table 'public.cargos'",
+  message: "Could not find the table 'public.chamados' in the schema cache"
+}

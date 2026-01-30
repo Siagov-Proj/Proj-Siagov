@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,214 +36,95 @@ import {
     ChevronRight,
     FileText,
     FolderOpen,
+    Loader2
 } from 'lucide-react';
 import { formatDate } from '@/utils/formatters';
 
-// Tipos
-interface IDocumento {
-    id: string;
-    numero: string;
-    titulo: string;
-    tipo: string;
-    categoria: string;
-    subcategoria: string;
-    lei: string;
-    processoId: string;
-    processoNumero: string;
-    status: 'Rascunho' | 'Em Revisão' | 'Concluído';
-    criadoEm: Date;
+// Services
+import { documentosService, IDocumentoDB } from '@/services/api/documentosService';
+import { categoriasDocService, ICategoriaDocumentoDB, ISubcategoriaDocumentoDB } from '@/services/api/categoriasDocService';
+import { processosService, IProcessoDB } from '@/services/api/processosService';
+
+interface CategoryStructure extends ICategoriaDocumentoDB {
+    subcategorias: ISubcategoriaDocumentoDB[];
 }
-
-interface ICategoria {
-    nome: string;
-    lei: string;
-    subcategorias: string[];
-}
-
-// Dados mock
-const mockDocumentos: IDocumento[] = [
-    {
-        id: 'd1',
-        numero: '2024-001',
-        titulo: 'Parecer Técnico - Pregão 15/2024',
-        tipo: 'Parecer',
-        categoria: 'Licitações',
-        subcategoria: 'Pregão Eletrônico',
-        lei: 'Lei 14.133/2021',
-        processoId: '1',
-        processoNumero: '001/2024',
-        status: 'Concluído',
-        criadoEm: new Date('2025-01-18'),
-    },
-    {
-        id: 'd2',
-        numero: '2024-002',
-        titulo: 'Nota Técnica - Dispensa 08/2024',
-        tipo: 'Nota Técnica',
-        categoria: 'Licitações',
-        subcategoria: 'Dispensa de Licitação',
-        lei: 'Lei 14.133/2021',
-        processoId: '1',
-        processoNumero: '001/2024',
-        status: 'Em Revisão',
-        criadoEm: new Date('2025-01-17'),
-    },
-    {
-        id: 'd3',
-        numero: '2024-003',
-        titulo: 'Relatório de Gestão RH - Jan/2025',
-        tipo: 'Relatório',
-        categoria: 'Recursos Humanos',
-        subcategoria: 'Relatórios',
-        lei: 'Lei 13.019/14',
-        processoId: '2',
-        processoNumero: '002/2024',
-        status: 'Rascunho',
-        criadoEm: new Date('2025-01-16'),
-    },
-    {
-        id: 'd4',
-        numero: '2024-004',
-        titulo: 'DFD - Documento de Formalização de Demanda',
-        tipo: 'DFD',
-        categoria: 'Licitações',
-        subcategoria: 'Contratação Direta',
-        lei: 'Lei 14.133/2021',
-        processoId: '1',
-        processoNumero: '001/2024',
-        status: 'Concluído',
-        criadoEm: new Date('2025-01-15'),
-    },
-    {
-        id: 'd5',
-        numero: '2024-005',
-        titulo: 'Termo de Referência - Material de Expediente',
-        tipo: 'Termo de Referência',
-        categoria: 'Licitações',
-        subcategoria: 'Pregão Eletrônico',
-        lei: 'Lei 8.666/93',
-        processoId: '1',
-        processoNumero: '001/2024',
-        status: 'Em Revisão',
-        criadoEm: new Date('2025-01-16'),
-    },
-    {
-        id: 'd6',
-        numero: '2024-006',
-        titulo: 'Edital Pregão Eletrônico 10/2024',
-        tipo: 'Edital',
-        categoria: 'Licitações',
-        subcategoria: 'Pregão Eletrônico',
-        lei: 'Lei 8.666/93',
-        processoId: '3',
-        processoNumero: '003/2024',
-        status: 'Concluído',
-        criadoEm: new Date('2025-01-14'),
-    },
-    {
-        id: 'd7',
-        numero: '2024-007',
-        titulo: 'Ata de Registro de Preços 05/2024',
-        tipo: 'Ata',
-        categoria: 'Contratos',
-        subcategoria: 'Atas de Registro',
-        lei: 'Lei 8.666/93',
-        processoId: '4',
-        processoNumero: '004/2024',
-        status: 'Concluído',
-        criadoEm: new Date('2025-01-13'),
-    },
-    {
-        id: 'd8',
-        numero: '2024-008',
-        titulo: 'Minuta Contratual - Serviços de Limpeza',
-        tipo: 'Minuta',
-        categoria: 'Contratos',
-        subcategoria: 'Minutas',
-        lei: 'Lei 14.133/2021',
-        processoId: '5',
-        processoNumero: '005/2024',
-        status: 'Em Revisão',
-        criadoEm: new Date('2025-01-12'),
-    },
-];
-
-const categorias: ICategoria[] = [
-    {
-        nome: 'Licitações',
-        lei: 'Lei 14.133/2021',
-        subcategorias: [
-            'Pregão Eletrônico',
-            'Dispensa de Licitação',
-            'Contratação Direta',
-            'Inexigibilidade',
-        ],
-    },
-    {
-        nome: 'Contratos',
-        lei: 'Lei 8.666/93',
-        subcategorias: ['Minutas', 'Atas de Registro', 'Aditivos', 'Rescisões'],
-    },
-    {
-        nome: 'Recursos Humanos',
-        lei: 'Lei 13.019/14',
-        subcategorias: ['Relatórios', 'Portarias', 'Pareceres'],
-    },
-    {
-        nome: 'Orçamento e Finanças',
-        lei: 'Lei 14.133/2021',
-        subcategorias: [
-            'Notas Técnicas',
-            'Relatórios Financeiros',
-            'Prestação de Contas',
-        ],
-    },
-];
 
 const LEIS = ['Lei 14.133/2021', 'Lei 8.666/93', 'Lei 13.019/14'];
 
 export default function DocumentosPage() {
+    const [documentos, setDocumentos] = useState<IDocumentoDB[]>([]);
+    const [categorias, setCategorias] = useState<CategoryStructure[]>([]);
+    const [processos, setProcessos] = useState<Pick<IProcessoDB, 'id' | 'numero'>[]>([]);
+
+    const [loading, setLoading] = useState(true);
     const [termoBusca, setTermoBusca] = useState('');
     const [filtroProcesso, setFiltroProcesso] = useState('todos');
     const [filtroLei, setFiltroLei] = useState<string | null>(null);
-    const [categoriaExpandida, setCategoriaExpandida] = useState<string | null>(
-        'Licitações'
-    );
+    const [categoriaExpandida, setCategoriaExpandida] = useState<string | null>(null);
     const [filtroCategoria, setFiltroCategoria] = useState('Todas');
     const [filtroSubcategoria, setFiltroSubcategoria] = useState('Todas');
 
-    // Processos únicos para filtro
-    const processosUnicos = Array.from(
-        new Set(mockDocumentos.map((d) => d.processoNumero))
-    );
+    useEffect(() => {
+        loadData();
+    }, []);
 
-    // Filtrar categorias baseado na lei
-    const categoriasFiltradas = filtroLei
-        ? categorias.filter((cat) => cat.lei === filtroLei)
-        : categorias;
+    const loadData = async () => {
+        try {
+            setLoading(true);
 
-    // Filtrar documentos
-    const documentosFiltrados = mockDocumentos.filter((doc) => {
-        const matchesBusca =
-            doc.titulo.toLowerCase().includes(termoBusca.toLowerCase()) ||
-            doc.numero.includes(termoBusca) ||
-            doc.processoNumero.includes(termoBusca);
-        const matchesProcesso =
-            filtroProcesso === 'todos' ||
-            doc.processoNumero === filtroProcesso;
-        const matchesCategoria =
-            filtroCategoria === 'Todas' || doc.categoria === filtroCategoria;
-        const matchesSubcategoria =
-            filtroSubcategoria === 'Todas' ||
-            doc.subcategoria === filtroSubcategoria;
-        const matchesLei = !filtroLei || doc.lei === filtroLei;
-        return (
-            matchesBusca &&
-            matchesProcesso &&
-            matchesCategoria &&
-            matchesSubcategoria &&
-            matchesLei
-        );
+            // Fetch Basics
+            const [docsData, catsData, procsData] = await Promise.all([
+                documentosService.listar(),
+                categoriasDocService.listarCategorias(),
+                processosService.listarParaSelect()
+            ]);
+
+            // Fetch Subcategories for sidebar structure (parallelized)
+            const catsWithSubs = await Promise.all(catsData.map(async (cat) => {
+                const subs = await categoriasDocService.listarSubcategorias(cat.id);
+                return { ...cat, subcategorias: subs };
+            }));
+
+            setDocumentos(docsData);
+            setCategorias(catsWithSubs);
+            setProcessos(procsData);
+
+            // Auto expand first category if exists
+            if (catsWithSubs.length > 0) {
+                setCategoriaExpandida(catsWithSubs[0].nome);
+            }
+
+        } catch (error) {
+            console.error('Erro ao carregar documentos:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Client-side filtering logic
+    const documentosFiltrados = documentos.filter((doc) => {
+        // Text Search
+        const searchLower = termoBusca.toLowerCase();
+        const tituloMatch = doc.titulo.toLowerCase().includes(searchLower);
+        const numeroMatch = doc.numero ? doc.numero.toLowerCase().includes(searchLower) : false;
+        const processoMatch = doc.processo?.numero ? doc.processo.numero.toLowerCase().includes(searchLower) : false;
+
+        const matchesBusca = !termoBusca || tituloMatch || numeroMatch || processoMatch;
+
+        // Filters
+        const matchesProcesso = filtroProcesso === 'todos' || doc.processo_id === filtroProcesso;
+
+        const catNome = doc.categoria?.nome || '';
+        const subNome = doc.subcategoria?.nome || '';
+
+        const matchesCategoria = filtroCategoria === 'Todas' || catNome === filtroCategoria;
+        const matchesSubcategoria = filtroSubcategoria === 'Todas' || subNome === filtroSubcategoria;
+
+        // Lei filter - assuming lei is on view model or doc
+        const docLei = doc.lei || doc.categoria?.lei;
+        const matchesLei = !filtroLei || docLei === filtroLei;
+
+        return matchesBusca && matchesProcesso && matchesCategoria && matchesSubcategoria && matchesLei;
     });
 
     const toggleCategoria = (nome: string) => {
@@ -257,14 +138,10 @@ export default function DocumentosPage() {
 
     const obterCorStatus = (status: string) => {
         switch (status) {
-            case 'Concluído':
-                return 'default';
-            case 'Em Revisão':
-                return 'secondary';
-            case 'Rascunho':
-                return 'outline';
-            default:
-                return 'outline';
+            case 'Concluído': return 'default';
+            case 'Em Revisão': return 'secondary';
+            case 'Rascunho': return 'outline';
+            default: return 'outline';
         }
     };
 
@@ -281,13 +158,18 @@ export default function DocumentosPage() {
                         Documentos gerados e vinculados aos processos
                     </p>
                 </div>
-
+                <Button asChild>
+                    <Link href="/documentos/novo">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Novo Documento
+                    </Link>
+                </Button>
             </div>
 
             {/* Layout Two-Column */}
             <div className="flex gap-6">
                 {/* Sidebar de Categorias */}
-                <Card className="w-64 shrink-0">
+                <Card className="w-64 shrink-0 hidden md:block">
                     <CardHeader className="pb-3">
                         <CardTitle className="text-sm font-semibold uppercase text-muted-foreground">
                             Categorias
@@ -308,9 +190,11 @@ export default function DocumentosPage() {
                             </div>
                         </button>
 
-                        {/* Accordion de Categorias */}
-                        {categoriasFiltradas.map((cat) => (
-                            <div key={cat.nome}>
+                        {/* Accordion de Categorias Dynamically Loaded */}
+                        {loading ? (
+                            <div className="p-4 text-center text-sm text-muted-foreground">Carregando...</div>
+                        ) : categorias.map((cat) => (
+                            <div key={cat.id}>
                                 <button
                                     onClick={() => toggleCategoria(cat.nome)}
                                     className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${filtroCategoria === cat.nome &&
@@ -332,21 +216,15 @@ export default function DocumentosPage() {
                                     <div className="ml-4 mt-1 space-y-1">
                                         {cat.subcategorias.map((sub) => (
                                             <button
-                                                key={sub}
-                                                onClick={() =>
-                                                    selecionarFiltro(
-                                                        cat.nome,
-                                                        sub
-                                                    )
-                                                }
-                                                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${filtroCategoria ===
-                                                    cat.nome &&
-                                                    filtroSubcategoria === sub
+                                                key={sub.id}
+                                                onClick={() => selecionarFiltro(cat.nome, sub.nome)}
+                                                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${filtroCategoria === cat.nome &&
+                                                    filtroSubcategoria === sub.nome
                                                     ? 'bg-secondary text-secondary-foreground'
                                                     : 'hover:bg-muted text-muted-foreground'
                                                     }`}
                                             >
-                                                {sub}
+                                                {sub.nome}
                                             </button>
                                         ))}
                                     </div>
@@ -359,20 +237,14 @@ export default function DocumentosPage() {
                 {/* Área Principal */}
                 <div className="flex-1 space-y-4">
                     {/* Botões de Filtro por Lei */}
-                    <div className="flex gap-3">
+                    <div className="flex gap-3 overflow-x-auto pb-2">
                         {LEIS.map((lei) => (
                             <Button
                                 key={lei}
-                                variant={
-                                    filtroLei === lei ? 'default' : 'secondary'
-                                }
+                                variant={filtroLei === lei ? 'default' : 'secondary'}
                                 size="sm"
-                                onClick={() =>
-                                    setFiltroLei(
-                                        filtroLei === lei ? null : lei
-                                    )
-                                }
-                                className="transition-all"
+                                onClick={() => setFiltroLei(filtroLei === lei ? null : lei)}
+                                className="whitespace-nowrap"
                             >
                                 {lei}
                             </Button>
@@ -382,15 +254,13 @@ export default function DocumentosPage() {
                     {/* Barra de Filtros */}
                     <Card>
                         <CardContent className="pt-4">
-                            <div className="flex items-center gap-4">
-                                <div className="flex-1 relative">
+                            <div className="flex flex-col md:flex-row items-center gap-4">
+                                <div className="flex-1 relative w-full">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                     <Input
                                         placeholder="Buscar por título ou número..."
                                         value={termoBusca}
-                                        onChange={(e) =>
-                                            setTermoBusca(e.target.value)
-                                        }
+                                        onChange={(e) => setTermoBusca(e.target.value)}
                                         className="pl-9"
                                     />
                                 </div>
@@ -398,16 +268,16 @@ export default function DocumentosPage() {
                                     value={filtroProcesso}
                                     onValueChange={setFiltroProcesso}
                                 >
-                                    <SelectTrigger className="w-[200px]">
+                                    <SelectTrigger className="w-full md:w-[200px]">
                                         <SelectValue placeholder="Filtrar por processo" />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="todos">
                                             Todos os Processos
                                         </SelectItem>
-                                        {processosUnicos.map((proc) => (
-                                            <SelectItem key={proc} value={proc}>
-                                                Processo {proc}
+                                        {processos.map((proc) => (
+                                            <SelectItem key={proc.id} value={proc.id}>
+                                                Processo {proc.numero}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
@@ -421,8 +291,7 @@ export default function DocumentosPage() {
                         <CardHeader>
                             <CardTitle>Lista de Documentos</CardTitle>
                             <CardDescription>
-                                {documentosFiltrados.length} documento(s)
-                                encontrado(s)
+                                {documentosFiltrados.length} documento(s) encontrado(s)
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -430,32 +299,27 @@ export default function DocumentosPage() {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead>
-                                                Título do Documento
-                                            </TableHead>
-                                            <TableHead className="w-32">
-                                                Categoria
-                                            </TableHead>
-                                            <TableHead className="w-40">
-                                                Subcategoria
-                                            </TableHead>
-                                            <TableHead className="w-24">
-                                                Status
-                                            </TableHead>
-                                            <TableHead className="w-20 text-center">
-                                                Ações
-                                            </TableHead>
+                                            <TableHead>Título do Documento</TableHead>
+                                            <TableHead className="w-32 hidden md:table-cell">Categoria</TableHead>
+                                            <TableHead className="w-40 hidden lg:table-cell">Subcategoria</TableHead>
+                                            <TableHead className="w-24">Status</TableHead>
+                                            <TableHead className="w-20 text-center">Ações</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {documentosFiltrados.length === 0 ? (
+                                        {loading ? (
                                             <TableRow>
-                                                <TableCell
-                                                    colSpan={5}
-                                                    className="text-center py-8 text-muted-foreground"
-                                                >
-                                                    Nenhum documento encontrado
-                                                    com os filtros aplicados.
+                                                <TableCell colSpan={5} className="text-center py-8">
+                                                    <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                        Carregando documentos...
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : documentosFiltrados.length === 0 ? (
+                                            <TableRow>
+                                                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                                                    Nenhum documento encontrado com os filtros aplicados.
                                                 </TableCell>
                                             </TableRow>
                                         ) : (
@@ -470,26 +334,20 @@ export default function DocumentosPage() {
                                                                 {doc.titulo}
                                                             </span>
                                                             <span className="text-sm text-muted-foreground">
-                                                                Nº {doc.numero}{' '}
-                                                                •{' '}
-                                                                {formatDate(
-                                                                    doc.criadoEm
-                                                                )}
+                                                                {doc.numero ? `Nº ${doc.numero}` : 'Sem Número'}
+                                                                {' • '}
+                                                                {formatDate(new Date(doc.created_at))}
                                                             </span>
                                                         </div>
                                                     </TableCell>
-                                                    <TableCell>
-                                                        {doc.categoria}
+                                                    <TableCell className="hidden md:table-cell">
+                                                        {doc.categoria?.nome || '-'}
+                                                    </TableCell>
+                                                    <TableCell className="hidden lg:table-cell">
+                                                        {doc.subcategoria?.nome || '-'}
                                                     </TableCell>
                                                     <TableCell>
-                                                        {doc.subcategoria}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <Badge
-                                                            variant={obterCorStatus(
-                                                                doc.status
-                                                            )}
-                                                        >
+                                                        <Badge variant={obterCorStatus(doc.status)}>
                                                             {doc.status}
                                                         </Badge>
                                                     </TableCell>
@@ -500,9 +358,7 @@ export default function DocumentosPage() {
                                                                 size="icon"
                                                                 asChild
                                                             >
-                                                                <Link
-                                                                    href={`/documentos/${doc.id}`}
-                                                                >
+                                                                <Link href={`/documentos/${doc.id}`}>
                                                                     <Eye className="h-4 w-4" />
                                                                 </Link>
                                                             </Button>
@@ -510,6 +366,10 @@ export default function DocumentosPage() {
                                                                 variant="ghost"
                                                                 size="icon"
                                                                 title="Baixar"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    alert('Download não implementado');
+                                                                }}
                                                             >
                                                                 <Download className="h-4 w-4" />
                                                             </Button>

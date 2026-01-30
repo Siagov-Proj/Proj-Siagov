@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,62 +15,22 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ActionBar } from '@/components/ui/action-bar';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
-import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { maskCpf } from '@/utils/masks';
 import { FIELD_LIMITS } from '@/utils/constants';
-import type { IUsuario } from '@/types';
-
-// Mock para cascata
-const mockInstituicoes = [
-    { id: '1', nome: 'Ministério da Fazenda' },
-    { id: '2', nome: 'Ministério da Educação' },
-];
-
-const mockOrgaos = [
-    { id: '1', instituicaoId: '1', nome: 'Secretaria de Finanças' },
-    { id: '2', instituicaoId: '1', nome: 'Secretaria de Administração' },
-];
-
-const mockUnidadesGestoras = [
-    { id: '1', orgaoId: '1', nome: 'Coordenadoria de Orçamento' },
-    { id: '2', orgaoId: '2', nome: 'Coordenadoria de RH' },
-];
-
-const mockSetores = [
-    { id: '1', unidadeGestoraId: '1', nome: 'Setor de Licitações' },
-    { id: '2', unidadeGestoraId: '2', nome: 'Setor de Pessoal' },
-];
-
-const mockCargos = [
-    { id: '1', setorId: '1', nome: 'Analista de Licitações' },
-    { id: '2', setorId: '2', nome: 'Analista de RH' },
-];
-
-const mockUsuarios: IUsuario[] = [
-    {
-        id: '1',
-        codigo: '001',
-        nome: 'João da Silva',
-        emailInstitucional: 'joao.silva@gov.br',
-        emailPessoal: 'joao@gmail.com',
-        telefone01: '(61) 99999-9999',
-        telefoneWhatsApp: '(61) 99999-9999',
-        cpf: '123.456.789-00',
-        nomeCredor: 'João da Silva (Credor)',
-        matricula: '123456',
-        vinculo: 'Efetivo',
-        instituicaoId: '1',
-        orgaoId: '1',
-        unidadeGestoraId: '1',
-        ugOrigem: '1',
-        setorId: '1',
-        cargoId: '1',
-        permissoes: ['admin'],
-        ativo: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-    },
-];
+import {
+    usuariosService,
+    instituicoesService,
+    orgaosService,
+    unidadesService,
+    setoresService,
+    cargosService,
+    IInstituicaoDB,
+    IOrgaoDB,
+    IUnidadeGestoraDB,
+    ISetorDB,
+    ICargoDB
+} from '@/services/api';
 
 const PERFIS_USUARIO = [
     { value: 'admin', label: 'Administrador' },
@@ -109,52 +69,206 @@ export default function EditarUsuarioPage() {
     const [erros, setErros] = useState<Record<string, string>>({});
     const [mostrarSenha, setMostrarSenha] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
 
-    // Cascata completa
-    const orgaosFiltrados = mockOrgaos.filter((o) => o.instituicaoId === formData.instituicaoId);
-    const ugsFiltradas = mockUnidadesGestoras.filter((ug) => ug.orgaoId === formData.orgaoId);
-    const setoresFiltrados = mockSetores.filter((s) => s.unidadeGestoraId === formData.unidadeGestoraId);
-    const cargosFiltrados = mockCargos.filter((c) => c.setorId === formData.setorId);
+    // Listas para selects
+    const [instituicoes, setInstituicoes] = useState<IInstituicaoDB[]>([]);
+    const [orgaos, setOrgaos] = useState<IOrgaoDB[]>([]);
+    const [unidades, setUnidades] = useState<IUnidadeGestoraDB[]>([]);
+    const [setores, setSetores] = useState<ISetorDB[]>([]);
+    const [cargos, setCargos] = useState<ICargoDB[]>([]);
+    const [unidadesOrigem, setUnidadesOrigem] = useState<IUnidadeGestoraDB[]>([]);
+
+    // Loading states for dropdowns
+    const [loadingOrgaos, setLoadingOrgaos] = useState(false);
+    const [loadingUnidades, setLoadingUnidades] = useState(false);
+    const [loadingSetores, setLoadingSetores] = useState(false);
+    const [loadingCargos, setLoadingCargos] = useState(false);
+
+    const carregarDados = useCallback(async () => {
+        try {
+            setLoading(true);
+            const id = params.id as string;
+
+            const [usuario, listaInstituicoes, listaUnidadesOrigem] = await Promise.all([
+                usuariosService.buscarPorId(id),
+                instituicoesService.listar(),
+                unidadesService.listar()
+            ]);
+
+            setInstituicoes(listaInstituicoes);
+            setUnidadesOrigem(listaUnidadesOrigem);
+
+            if (usuario) {
+                // Carregar dependências em cascata
+                if (usuario.instituicao_id) {
+                    const listaOrgaos = await orgaosService.listarPorInstituicao(usuario.instituicao_id);
+                    setOrgaos(listaOrgaos);
+                }
+
+                if (usuario.orgao_id) {
+                    const listaUnidades = await unidadesService.listarPorOrgao(usuario.orgao_id);
+                    setUnidades(listaUnidades);
+                }
+
+                if (usuario.unidade_gestora_id) {
+                    const listaSetores = await setoresService.listarPorUnidadeGestora(usuario.unidade_gestora_id);
+                    setSetores(listaSetores);
+                }
+
+                if (usuario.setor_id) {
+                    const listaCargos = await cargosService.listarPorSetor(usuario.setor_id);
+                    setCargos(listaCargos);
+                }
+
+                const data = {
+                    codigo: usuario.codigo,
+                    nome: usuario.nome,
+                    cpf: maskCpf(usuario.cpf),
+                    nomeCredor: usuario.nome_credor || '',
+                    matricula: usuario.matricula || '',
+                    vinculo: usuario.vinculo || '',
+                    emailInstitucional: usuario.email_institucional || '',
+                    emailPessoal: usuario.email_pessoal || '',
+                    telefone01: usuario.telefone_01 || '',
+                    telefoneWhatsApp: usuario.telefone_whatsapp || '',
+                    instituicaoId: usuario.instituicao_id || '',
+                    orgaoId: usuario.orgao_id || '',
+                    unidadeGestoraId: usuario.unidade_gestora_id || '',
+                    ugOrigem: usuario.ug_origem_id || '',
+                    setorId: usuario.setor_id || '',
+                    cargoId: usuario.cargo_id || '',
+                    perfilAcesso: usuario.permissoes?.[0] || '',
+                    senha: '', // Não carregamos senha
+                    confirmarSenha: '',
+                };
+                setFormData(data);
+                setOriginalData(data);
+            } else {
+                alert('Usuário não encontrado');
+                router.push('/cadastros/usuarios');
+            }
+        } catch (err) {
+            console.error('Erro ao carregar dados:', err);
+            alert('Erro ao carregar dados do usuário. Tente novamente.');
+            router.push('/cadastros/usuarios');
+        } finally {
+            setLoading(false);
+        }
+    }, [params.id, router]);
 
     useEffect(() => {
-        const id = params.id as string;
-        const found = mockUsuarios.find((u) => u.id === id);
+        carregarDados();
+    }, [carregarDados]);
 
-        if (found) {
-            const data = {
-                codigo: found.codigo,
-                nome: found.nome,
-                cpf: found.cpf,
-                nomeCredor: found.nomeCredor || '',
-                matricula: found.matricula,
-                vinculo: found.vinculo,
-                emailInstitucional: found.emailInstitucional,
-                emailPessoal: found.emailPessoal || '',
-                telefone01: found.telefone01 || '',
-                telefoneWhatsApp: found.telefoneWhatsApp || '',
-                instituicaoId: found.instituicaoId,
-                orgaoId: found.orgaoId,
-                unidadeGestoraId: found.unidadeGestoraId,
-                ugOrigem: found.ugOrigem || '',
-                setorId: found.setorId,
-                cargoId: found.cargoId,
-                perfilAcesso: found.permissoes?.[0] || '',
-                senha: '',
-                confirmarSenha: '',
-            };
-            setFormData(data);
-            setOriginalData(data);
+    const handleInstituicaoChange = async (instituicaoId: string) => {
+        setFormData({
+            ...formData,
+            instituicaoId,
+            orgaoId: '',
+            unidadeGestoraId: '',
+            setorId: '',
+            cargoId: ''
+        });
+        setOrgaos([]);
+        setUnidades([]);
+        setSetores([]);
+        setCargos([]);
+
+        if (instituicaoId) {
+            try {
+                setLoadingOrgaos(true);
+                const data = await orgaosService.listarPorInstituicao(instituicaoId);
+                setOrgaos(data);
+            } catch (err) {
+                console.error('Erro ao carregar órgãos:', err);
+            } finally {
+                setLoadingOrgaos(false);
+            }
         }
-        setLoading(false);
-    }, [params.id]);
+    };
+
+    const handleOrgaoChange = async (orgaoId: string) => {
+        setFormData({
+            ...formData,
+            orgaoId,
+            unidadeGestoraId: '',
+            setorId: '',
+            cargoId: ''
+        });
+        setUnidades([]);
+        setSetores([]);
+        setCargos([]);
+
+        if (orgaoId) {
+            try {
+                setLoadingUnidades(true);
+                const data = await unidadesService.listarPorOrgao(orgaoId);
+                setUnidades(data);
+            } catch (err) {
+                console.error('Erro ao carregar unidades:', err);
+            } finally {
+                setLoadingUnidades(false);
+            }
+        }
+    };
+
+    const handleUnidadeChange = async (unidadeGestoraId: string) => {
+        setFormData({
+            ...formData,
+            unidadeGestoraId,
+            setorId: '',
+            cargoId: ''
+        });
+        setSetores([]);
+        setCargos([]);
+
+        if (unidadeGestoraId) {
+            try {
+                setLoadingSetores(true);
+                const data = await setoresService.listarPorUnidadeGestora(unidadeGestoraId);
+                setSetores(data);
+            } catch (err) {
+                console.error('Erro ao carregar setores:', err);
+            } finally {
+                setLoadingSetores(false);
+            }
+        }
+    };
+
+    const handleSetorChange = async (setorId: string) => {
+        setFormData({
+            ...formData,
+            setorId,
+            cargoId: ''
+        });
+        setCargos([]);
+
+        if (setorId) {
+            try {
+                setLoadingCargos(true);
+                const data = await cargosService.listarPorSetor(setorId);
+                setCargos(data);
+            } catch (err) {
+                console.error('Erro ao carregar cargos:', err);
+            } finally {
+                setLoadingCargos(false);
+            }
+        }
+    };
 
     const validar = (): boolean => {
         const novosErros: Record<string, string> = {};
 
+        if (!formData.codigo) novosErros.codigo = 'Código é obrigatório';
         if (!formData.nome) novosErros.nome = 'Nome é obrigatório';
         if (!formData.cpf) novosErros.cpf = 'CPF é obrigatório';
+        if (formData.cpf && formData.cpf.length < 14) novosErros.cpf = 'CPF incompleto';
         if (!formData.emailInstitucional) novosErros.emailInstitucional = 'E-mail Institucional é obrigatório';
         if (!formData.instituicaoId) novosErros.instituicaoId = 'Instituição é obrigatória';
+        if (!formData.orgaoId) novosErros.orgaoId = 'Órgão é obrigatório';
+        if (!formData.unidadeGestoraId) novosErros.unidadeGestoraId = 'Unidade Gestora é obrigatória';
+        if (!formData.setorId) novosErros.setorId = 'Setor é obrigatório';
 
         // Validação de senha só se preenchida
         if (formData.senha) {
@@ -168,10 +282,37 @@ export default function EditarUsuarioPage() {
         return Object.keys(novosErros).length === 0;
     };
 
-    const handleSalvar = () => {
+    const handleSalvar = async () => {
         if (!validar()) return;
-        console.log('Atualizando usuário:', params.id, formData);
-        router.push('/cadastros/usuarios');
+
+        try {
+            setSaving(true);
+            await usuariosService.atualizar(params.id as string, {
+                codigo: formData.codigo,
+                nome: formData.nome,
+                cpf: formData.cpf.replace(/\D/g, ''),
+                nome_credor: formData.nomeCredor,
+                matricula: formData.matricula,
+                vinculo: formData.vinculo,
+                email_institucional: formData.emailInstitucional,
+                email_pessoal: formData.emailPessoal,
+                telefone_01: formData.telefone01,
+                telefone_whatsapp: formData.telefoneWhatsApp,
+                instituicao_id: formData.instituicaoId,
+                orgao_id: formData.orgaoId,
+                unidade_gestora_id: formData.unidadeGestoraId,
+                ug_origem_id: formData.ugOrigem,
+                setor_id: formData.setorId,
+                cargo_id: formData.cargoId || undefined,
+                permissoes: [formData.perfilAcesso].filter(Boolean),
+            });
+            router.push('/cadastros/usuarios');
+        } catch (err) {
+            console.error('Erro ao atualizar usuário:', err);
+            alert('Erro ao atualizar usuário. Tente novamente.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleCancelar = () => {
@@ -179,11 +320,16 @@ export default function EditarUsuarioPage() {
     };
 
     const handleLimpar = () => {
-        setFormData(originalData);
-        setErros({});
+        carregarDados();
     };
 
-    if (loading) return <div>Carregando...</div>;
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -207,7 +353,20 @@ export default function EditarUsuarioPage() {
                 <CardContent>
                     <div className="grid gap-4">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-2 sm:col-span-2">
+                            <div className="space-y-2">
+                                <Label htmlFor="codigo">Código<span className="text-red-500 ml-1">*</span></Label>
+                                <Input
+                                    id="codigo"
+                                    value={formData.codigo}
+                                    onChange={(e) => setFormData({ ...formData, codigo: e.target.value.substring(0, 10) })}
+                                    maxLength={10}
+                                    placeholder="Código"
+                                    className={`font-mono w-full ${erros.codigo ? 'border-red-500' : ''}`}
+                                />
+                                {erros.codigo && <p className="text-sm text-red-500">{erros.codigo}</p>}
+                            </div>
+
+                            <div className="space-y-2 sm:col-span-1">
                                 <Label htmlFor="nome">
                                     Nome Completo<span className="text-red-500 ml-1">*</span>
                                 </Label>
@@ -231,11 +390,11 @@ export default function EditarUsuarioPage() {
                                     value={formData.cpf}
                                     onChange={(e) => {
                                         const novoCpf = maskCpf(e.target.value);
-                                        const nomeCredorMock = novoCpf.length === 14 ? 'Credor Exemplo Mock' : '';
+                                        const nomeCredorMock = novoCpf.length === 14 ? formData.nome : '';
                                         setFormData({
                                             ...formData,
                                             cpf: novoCpf,
-                                            nomeCredor: nomeCredorMock
+                                            nomeCredor: formData.nomeCredor || nomeCredorMock
                                         });
                                     }}
                                     maxLength={14}
@@ -250,8 +409,7 @@ export default function EditarUsuarioPage() {
                                 <Input
                                     id="nomeCredor"
                                     value={formData.nomeCredor}
-                                    readOnly
-                                    className="bg-muted"
+                                    onChange={(e) => setFormData({ ...formData, nomeCredor: e.target.value })}
                                     placeholder="Preenchido automaticamente..."
                                 />
                             </div>
@@ -356,21 +514,14 @@ export default function EditarUsuarioPage() {
                             <Label>Instituição<span className="text-red-500 ml-1">*</span></Label>
                             <Select
                                 value={formData.instituicaoId}
-                                onValueChange={(valor) => setFormData({
-                                    ...formData,
-                                    instituicaoId: valor,
-                                    orgaoId: '',
-                                    unidadeGestoraId: '',
-                                    setorId: '',
-                                    cargoId: ''
-                                })}
+                                onValueChange={handleInstituicaoChange}
                             >
                                 <SelectTrigger className={erros.instituicaoId ? 'border-red-500' : ''}>
                                     <SelectValue placeholder="Selecione" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {mockInstituicoes.map((inst) => (
-                                        <SelectItem key={inst.id} value={inst.id}>{inst.nome}</SelectItem>
+                                    {instituicoes.map((inst) => (
+                                        <SelectItem key={inst.id} value={inst.id}>{inst.codigo} - {inst.nome}</SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
@@ -378,50 +529,55 @@ export default function EditarUsuarioPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <Label>Órgão</Label>
-                            <Select
-                                value={formData.orgaoId}
-                                onValueChange={(valor) => setFormData({
-                                    ...formData,
-                                    orgaoId: valor,
-                                    unidadeGestoraId: '',
-                                    setorId: '',
-                                    cargoId: ''
-                                })}
-                                disabled={!formData.instituicaoId}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {orgaosFiltrados.map((org) => (
-                                        <SelectItem key={org.id} value={org.id}>{org.nome}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <Label>Órgão<span className="text-red-500 ml-1">*</span></Label>
+                            {loadingOrgaos ? (
+                                <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted">
+                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                    <span className="text-sm text-muted-foreground">Carregando...</span>
+                                </div>
+                            ) : (
+                                <Select
+                                    value={formData.orgaoId}
+                                    onValueChange={handleOrgaoChange}
+                                    disabled={!formData.instituicaoId}
+                                >
+                                    <SelectTrigger className={erros.orgaoId ? 'border-red-500' : ''}>
+                                        <SelectValue placeholder={formData.instituicaoId ? "Selecione" : "Aguardando..."} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {orgaos.map((org) => (
+                                            <SelectItem key={org.id} value={org.id}>{org.codigo} - {org.nome}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
+                            {erros.orgaoId && <p className="text-sm text-red-500">{erros.orgaoId}</p>}
                         </div>
 
                         <div className="space-y-2">
-                            <Label>Unidade Gestora</Label>
-                            <Select
-                                value={formData.unidadeGestoraId}
-                                onValueChange={(valor) => setFormData({
-                                    ...formData,
-                                    unidadeGestoraId: valor,
-                                    setorId: '',
-                                    cargoId: ''
-                                })}
-                                disabled={!formData.orgaoId}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {ugsFiltradas.map((ug) => (
-                                        <SelectItem key={ug.id} value={ug.id}>{ug.nome}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <Label>Unidade Gestora<span className="text-red-500 ml-1">*</span></Label>
+                            {loadingUnidades ? (
+                                <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted">
+                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                    <span className="text-sm text-muted-foreground">Carregando...</span>
+                                </div>
+                            ) : (
+                                <Select
+                                    value={formData.unidadeGestoraId}
+                                    onValueChange={handleUnidadeChange}
+                                    disabled={!formData.orgaoId}
+                                >
+                                    <SelectTrigger className={erros.unidadeGestoraId ? 'border-red-500' : ''}>
+                                        <SelectValue placeholder={formData.orgaoId ? "Selecione" : "Aguardando..."} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {unidades.map((ug) => (
+                                            <SelectItem key={ug.id} value={ug.id}>{ug.codigo} - {ug.nome}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
+                            {erros.unidadeGestoraId && <p className="text-sm text-red-500">{erros.unidadeGestoraId}</p>}
                         </div>
 
                         <div className="space-y-2">
@@ -434,47 +590,62 @@ export default function EditarUsuarioPage() {
                                     <SelectValue placeholder="Selecione" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {mockUnidadesGestoras.map((ug) => (
-                                        <SelectItem key={ug.id} value={ug.id}>{ug.nome}</SelectItem>
+                                    {unidadesOrigem.map((ug) => (
+                                        <SelectItem key={ug.id} value={ug.id}>{ug.codigo} - {ug.nome}</SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
                         </div>
 
                         <div className="space-y-2">
-                            <Label>Setor</Label>
-                            <Select
-                                value={formData.setorId}
-                                onValueChange={(valor) => setFormData({ ...formData, setorId: valor, cargoId: '' })}
-                                disabled={!formData.unidadeGestoraId}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {setoresFiltrados.map((setor) => (
-                                        <SelectItem key={setor.id} value={setor.id}>{setor.nome}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <Label>Setor<span className="text-red-500 ml-1">*</span></Label>
+                            {loadingSetores ? (
+                                <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted">
+                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                    <span className="text-sm text-muted-foreground">Carregando...</span>
+                                </div>
+                            ) : (
+                                <Select
+                                    value={formData.setorId}
+                                    onValueChange={handleSetorChange}
+                                    disabled={!formData.unidadeGestoraId}
+                                >
+                                    <SelectTrigger className={erros.setorId ? 'border-red-500' : ''}>
+                                        <SelectValue placeholder={formData.unidadeGestoraId ? "Selecione" : "Aguardando..."} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {setores.map((setor) => (
+                                            <SelectItem key={setor.id} value={setor.id}>{setor.codigo} - {setor.nome}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
+                            {erros.setorId && <p className="text-sm text-red-500">{erros.setorId}</p>}
                         </div>
 
                         <div className="space-y-2">
                             <Label>Cargo</Label>
-                            <Select
-                                value={formData.cargoId}
-                                onValueChange={(valor) => setFormData({ ...formData, cargoId: valor })}
-                                disabled={!formData.setorId}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {cargosFiltrados.map((cargo) => (
-                                        <SelectItem key={cargo.id} value={cargo.id}>{cargo.nome}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            {loadingCargos ? (
+                                <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted">
+                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                    <span className="text-sm text-muted-foreground">Carregando...</span>
+                                </div>
+                            ) : (
+                                <Select
+                                    value={formData.cargoId}
+                                    onValueChange={(valor) => setFormData({ ...formData, cargoId: valor })}
+                                    disabled={!formData.setorId}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder={formData.setorId ? "Selecione" : "Aguardando..."} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {cargos.map((cargo) => (
+                                            <SelectItem key={cargo.id} value={cargo.id}>{cargo.nome}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
                         </div>
 
                         <div className="space-y-2">
@@ -549,6 +720,7 @@ export default function EditarUsuarioPage() {
                 onCancelar={handleCancelar}
                 onLimpar={handleLimpar}
                 mode="edit"
+                isLoading={saving}
             />
         </div>
     );

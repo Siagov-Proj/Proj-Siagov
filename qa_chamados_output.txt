@@ -1,0 +1,19 @@
+⚠️  Node.js 18 and below are deprecated and will no longer be supported in future versions of @supabase/supabase-js. Please upgrade to Node.js 20 or later. For more information, visit: https://github.com/orgs/supabase/discussions/37217
+--- STARTING CHAMADOS E2E QA ---
+1. Creating Chamado...
+--- QA FAILED ---
+Error: @supabase/ssr: Your project's URL and API key are required to create a Supabase client!
+
+Check your Supabase project's API settings to find these values
+
+https://supabase.com/dashboard/project/_/settings/api
+    at createBrowserClient (C:\Users\JoãoVictorRibeiroLag\Documents\Projetos Highcode\Projeto Siagov\siagov-next\node_modules\@supabase\ssr\src\createBrowserClient.ts:111:11)
+    at createClient (c:\Users\Jo%C3%A3oVictorRibeiroLag\Documents\Projetos Highcode\Projeto Siagov\siagov-next\src\lib\supabase\client.ts:9:12)
+    at getSupabaseClient (c:\Users\Jo%C3%A3oVictorRibeiroLag\Documents\Projetos Highcode\Projeto Siagov\siagov-next\src\lib\supabase\client.ts:20:25)
+    at Object.criar (c:\Users\Jo%C3%A3oVictorRibeiroLag\Documents\Projetos Highcode\Projeto Siagov\siagov-next\src\services\api\chamadosService.ts:98:26)
+    at runQA (c:\Users\Jo%C3%A3oVictorRibeiroLag\Documents\Projetos Highcode\Projeto Siagov\siagov-next\scripts\qa_chamados_e2e.ts:21:51)
+    at <anonymous> (c:\Users\Jo%C3%A3oVictorRibeiroLag\Documents\Projetos Highcode\Projeto Siagov\siagov-next\scripts\qa_chamados_e2e.ts:85:1)
+    at Object.<anonymous> (c:\Users\Jo%C3%A3oVictorRibeiroLag\Documents\Projetos Highcode\Projeto Siagov\siagov-next\scripts\qa_chamados_e2e.ts:85:7)
+    at Module._compile (node:internal/modules/cjs/loader:1364:14)
+    at Object.transformer (C:\Users\JoãoVictorRibeiroLag\AppData\Local\npm-cache\_npx\fd45a72a545557e9\node_modules\tsx\dist\register-D46fvsV_.cjs:3:1104)
+    at Module.load (node:internal/modules/cjs/loader:1203:32)

@@ -1,0 +1,11 @@
+⚠️  Node.js 18 and below are deprecated and will no longer be supported in future versions of @supabase/supabase-js. Please upgrade to Node.js 20 or later. For more information, visit: https://github.com/orgs/supabase/discussions/37217
+Env loaded.
+--- STARTING CONFIGURACOES QA ---
+1. Fetching current config...
+--- QA FAILED ---
+{
+  code: 'PGRST205',
+  details: null,
+  hint: "Perhaps you meant the table 'public.tramitacoes'",
+  message: "Could not find the table 'public.configuracoes' in the schema cache"
+}

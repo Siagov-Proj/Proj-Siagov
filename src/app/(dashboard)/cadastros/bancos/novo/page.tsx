@@ -11,6 +11,7 @@ import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { maskCodigoComZeros, maskCnpj } from '@/utils/masks';
 import { FIELD_LIMITS } from '@/utils/constants';
 import { ArrowLeft } from 'lucide-react';
+import { bancosService } from '@/services/api';
 
 const emptyFormData = {
     codigo: '',
@@ -23,6 +24,7 @@ export default function NovoBancoPage() {
     const router = useRouter();
     const [formData, setFormData] = useState(emptyFormData);
     const [errors, setErrors] = useState<Record<string, string>>({});
+    const [saving, setSaving] = useState(false);
 
     const validate = (): boolean => {
         const newErrors: Record<string, string> = {};
@@ -34,10 +36,25 @@ export default function NovoBancoPage() {
         return Object.keys(newErrors).length === 0;
     };
 
-    const handleSalvar = () => {
+    const handleSalvar = async () => {
         if (!validate()) return;
-        console.log('Salvando novo banco:', formData);
-        router.push('/cadastros/bancos');
+
+        try {
+            setSaving(true);
+            await bancosService.criar({
+                codigo: formData.codigo,
+                nome: formData.nome,
+                nome_abreviado: formData.nomeAbreviado,
+                cnpj: formData.cnpj,
+                ativo: true,
+            });
+            router.push('/cadastros/bancos');
+        } catch (err) {
+            console.error('Erro ao salvar banco:', err);
+            alert('Erro ao salvar banco. Tente novamente.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleCancelar = () => {
@@ -137,6 +154,7 @@ export default function NovoBancoPage() {
                 onCancelar={handleCancelar}
                 onLimpar={handleLimpar}
                 mode="create"
+                isLoading={saving}
             />
         </div>
     );

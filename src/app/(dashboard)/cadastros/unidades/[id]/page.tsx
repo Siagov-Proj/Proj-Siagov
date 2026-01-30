@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -15,52 +15,11 @@ import {
 } from '@/components/ui/select';
 import { ActionBar } from '@/components/ui/action-bar';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
-import { maskCnpj, maskCodigoComZeros, maskCep, maskTelefone } from '@/utils/masks';
+import { maskCnpj, maskCep, maskTelefone } from '@/utils/masks';
 import { TIPOS_ADMINISTRACAO, GRUPOS_INDIRETA, FIELD_LIMITS } from '@/utils/constants';
 import type { IUnidadeGestora } from '@/types';
-import { ArrowLeft } from 'lucide-react';
-
-// Mock data
-const mockInstituicoes = [
-    { id: '1', nome: 'Ministério da Fazenda', codigo: '001' },
-    { id: '2', nome: 'Ministério da Educação', codigo: '002' },
-];
-
-const mockOrgaos = [
-    { id: '1', instituicaoId: '1', nome: 'Secretaria de Finanças', codigo: '000001' },
-    { id: '2', instituicaoId: '1', nome: 'Secretaria de Administração', codigo: '000002' },
-    { id: '3', instituicaoId: '2', nome: 'Secretaria de Ensino', codigo: '000003' },
-];
-
-const mockUnidades: IUnidadeGestora[] = [
-    {
-        id: '1',
-        codigo: '000001',
-        orgaoId: '1',
-        nome: 'Coordenadoria de Orçamento',
-        nomeAbreviado: 'CORC',
-        cnpj: '00.000.000/0001-01',
-        ordenadorDespesa: 'João da Silva',
-        ugTce: '12345',
-        ugSiafemSigef: '123456',
-        ugSiasg: '123456',
-        tipoUnidadeGestora: 'Gestora',
-        tipoAdministracao: 'Direta',
-        grupoIndireta: undefined,
-        cep: '70000-000',
-        logradouro: 'Esplanada dos Ministérios',
-        numero: 'S/N',
-        complemento: 'Bloco A',
-        bairro: 'Zona Cívico-Administrativa',
-        municipio: 'Brasília',
-        uf: 'DF',
-        emailPrimario: 'contato@ug.gov.br',
-        telefone: '(61) 3333-3333',
-        ativo: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-    },
-];
+import { ArrowLeft, Loader2 } from 'lucide-react';
+import { unidadesService, instituicoesService, orgaosService, IInstituicaoDB, IOrgaoDB } from '@/services/api';
 
 const emptyFormData = {
     codigo: '',
@@ -97,54 +56,110 @@ export default function EditarUnidadePage() {
     const [originalData, setOriginalData] = useState(emptyFormData);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
 
-    // Mock data fetch
-    useEffect(() => {
-        const id = params.id as string;
-        const found = mockUnidades.find(u => u.id === id);
+    // Listas para selects
+    const [instituicoes, setInstituicoes] = useState<IInstituicaoDB[]>([]);
+    const [orgaos, setOrgaos] = useState<IOrgaoDB[]>([]);
+    const [loadingOrgaos, setLoadingOrgaos] = useState(false);
 
-        if (found) {
-            const orgao = mockOrgaos.find(o => o.id === found.orgaoId);
-            const data = {
-                codigo: found.codigo,
-                instituicaoId: orgao?.instituicaoId || '',
-                orgaoId: found.orgaoId,
-                nome: found.nome,
-                nomeAbreviado: found.nomeAbreviado,
-                cnpj: found.cnpj || '',
-                cep: found.cep || '',
-                logradouro: found.logradouro || '',
-                numero: found.numero || '',
-                complemento: found.complemento || '',
-                bairro: found.bairro || '',
-                municipio: found.municipio || '',
-                uf: found.uf || '',
-                tipoAdministracao: found.tipoAdministracao,
-                grupoIndireta: found.grupoIndireta,
-                normativaCriacao: found.normativaCriacao || '',
-                numeroDiarioOficial: found.numeroDiarioOficial || '',
-                ordenadorDespesa: found.ordenadorDespesa || '',
-                emailPrimario: found.emailPrimario || '',
-                emailSecundario: found.emailSecundario || '',
-                telefone: found.telefone || '',
-                ugSiafemSigef: found.ugSiafemSigef || '',
-                ugTce: found.ugTce || '',
-                ugSiasg: found.ugSiasg || '',
-                tipoUnidadeGestora: found.tipoUnidadeGestora || '',
-            };
-            setFormData(data);
-            setOriginalData(data);
+    const carregarDados = useCallback(async () => {
+        try {
+            setLoading(true);
+            const id = params.id as string;
+
+            // Carrega unidade e instituições em paralelo
+            const [unidade, listaInstituicoes] = await Promise.all([
+                unidadesService.buscarPorId(id),
+                instituicoesService.listar(),
+            ]);
+
+            setInstituicoes(listaInstituicoes);
+
+            if (unidade) {
+                // Busca o órgão para pegar o ID da instituição
+                let instituicaoId = '';
+                if (unidade.orgao_id) {
+                    const orgao = await orgaosService.buscarPorId(unidade.orgao_id);
+                    if (orgao) {
+                        instituicaoId = orgao.instituicao_id || '';
+                        // Já carrega a lista de órgãos dessa instituição
+                        const listaOrgaos = await orgaosService.listarPorInstituicao(instituicaoId);
+                        setOrgaos(listaOrgaos);
+                    }
+                }
+
+                const data = {
+                    codigo: unidade.codigo,
+                    instituicaoId: instituicaoId,
+                    orgaoId: unidade.orgao_id || '',
+                    nome: unidade.nome,
+                    nomeAbreviado: unidade.nome_abreviado || '',
+                    cnpj: unidade.cnpj || '',
+                    cep: unidade.cep || '',
+                    logradouro: unidade.logradouro || '',
+                    numero: unidade.numero || '',
+                    complemento: unidade.complemento || '',
+                    bairro: unidade.bairro || '',
+                    municipio: unidade.municipio || '',
+                    uf: unidade.uf || '',
+                    tipoAdministracao: unidade.tipo_administracao as IUnidadeGestora['tipoAdministracao'],
+                    grupoIndireta: unidade.grupo_indireta as IUnidadeGestora['grupoIndireta'],
+                    normativaCriacao: unidade.normativa_criacao || '',
+                    numeroDiarioOficial: unidade.numero_diario_oficial || '',
+                    ordenadorDespesa: unidade.ordenador_despesa || '',
+                    emailPrimario: unidade.email_primario || '',
+                    emailSecundario: unidade.email_secundario || '',
+                    telefone: unidade.telefone || '',
+                    ugSiafemSigef: unidade.ug_siafem_sigef || '',
+                    ugTce: unidade.ug_tce || '',
+                    ugSiasg: unidade.ug_siasg || '',
+                    tipoUnidadeGestora: unidade.tipo_unidade_gestora || '',
+                };
+                setFormData(data);
+                setOriginalData(data);
+            } else {
+                alert('Unidade Gestora não encontrada');
+                router.push('/cadastros/unidades');
+            }
+        } catch (err) {
+            console.error('Erro ao carregar dados:', err);
+            alert('Erro ao carregar dados. Tente novamente.');
+            router.push('/cadastros/unidades');
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
-    }, [params.id]);
+    }, [params.id, router]);
 
-    const orgaosFiltrados = mockOrgaos.filter(
-        (orgao) => orgao.instituicaoId === formData.instituicaoId
-    );
+    useEffect(() => {
+        carregarDados();
+    }, [carregarDados]);
+
+    // Carregar órgãos quando a instituição mudar manualmente
+    const handleInstituicaoChange = async (instituicaoId: string) => {
+        setFormData({ ...formData, instituicaoId, orgaoId: '' });
+        if (!instituicaoId) {
+            setOrgaos([]);
+            return;
+        }
+
+        try {
+            setLoadingOrgaos(true);
+            const dados = await orgaosService.listarPorInstituicao(instituicaoId);
+            setOrgaos(dados);
+        } catch (err) {
+            console.error('Erro ao carregar órgãos:', err);
+            setOrgaos([]);
+        } finally {
+            setLoadingOrgaos(false);
+        }
+    };
 
     const validate = (): boolean => {
         const newErrors: Record<string, string> = {};
 
+        if (!formData.codigo) newErrors.codigo = 'Código é obrigatório';
+        if (formData.codigo.length !== 6) newErrors.codigo = 'Código deve ter 6 dígitos';
         if (!formData.instituicaoId) newErrors.instituicaoId = 'Instituição é obrigatória';
         if (!formData.orgaoId) newErrors.orgaoId = 'Órgão é obrigatório';
         if (!formData.nome) newErrors.nome = 'Nome é obrigatório';
@@ -158,10 +173,44 @@ export default function EditarUnidadePage() {
         return Object.keys(newErrors).length === 0;
     };
 
-    const handleSalvar = () => {
+    const handleSalvar = async () => {
         if (!validate()) return;
-        console.log('Atualizando unidade:', params.id, formData);
-        router.push('/cadastros/unidades');
+
+        try {
+            setSaving(true);
+            await unidadesService.atualizar(params.id as string, {
+                codigo: formData.codigo,
+                orgao_id: formData.orgaoId,
+                nome: formData.nome,
+                nome_abreviado: formData.nomeAbreviado,
+                cnpj: formData.cnpj,
+                cep: formData.cep,
+                logradouro: formData.logradouro,
+                numero: formData.numero,
+                complemento: formData.complemento,
+                bairro: formData.bairro,
+                municipio: formData.municipio,
+                uf: formData.uf,
+                tipo_administracao: formData.tipoAdministracao,
+                grupo_indireta: formData.grupoIndireta,
+                normativa_criacao: formData.normativaCriacao,
+                numero_diario_oficial: formData.numeroDiarioOficial,
+                ordenador_despesa: formData.ordenadorDespesa,
+                email_primario: formData.emailPrimario,
+                email_secundario: formData.emailSecundario,
+                telefone: formData.telefone,
+                ug_siafem_sigef: formData.ugSiafemSigef,
+                ug_tce: formData.ugTce,
+                ug_siasg: formData.ugSiasg,
+                tipo_unidade_gestora: formData.tipoUnidadeGestora,
+            });
+            router.push('/cadastros/unidades');
+        } catch (err) {
+            console.error('Erro ao atualizar unidade gestora:', err);
+            alert('Erro ao atualizar unidade gestora. Tente novamente.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleCancelar = () => {
@@ -178,7 +227,13 @@ export default function EditarUnidadePage() {
         setFormData({ ...formData, cep });
     };
 
-    if (loading) return <div>Carregando...</div>;
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -205,14 +260,17 @@ export default function EditarUnidadePage() {
                         <div className="space-y-2">
                             <div className="flex items-center gap-1">
                                 <Label htmlFor="codigo">Código</Label>
-                                <FieldTooltip content="Código gerado automaticamente" />
+                                <FieldTooltip content="Código gerado manualmente (6 dígitos)" />
                             </div>
                             <Input
                                 id="codigo"
                                 value={formData.codigo}
-                                readOnly
-                                className="bg-muted font-mono w-32"
+                                onChange={(e) => setFormData({ ...formData, codigo: e.target.value.replace(/\D/g, '').substring(0, 6) })}
+                                maxLength={6}
+                                placeholder="000000"
+                                className={`font-mono w-32 ${errors.codigo ? 'border-red-500' : ''}`}
                             />
+                            {errors.codigo && <p className="text-sm text-red-500">{errors.codigo}</p>}
                         </div>
 
                         {/* Instituição e Órgão */}
@@ -222,16 +280,17 @@ export default function EditarUnidadePage() {
                                     <Label htmlFor="instituicaoId">
                                         Instituição<span className="text-red-500 ml-1">*</span>
                                     </Label>
+                                    <FieldTooltip content="Selecione a instituição para filtrar os órgãos" />
                                 </div>
                                 <Select
                                     value={formData.instituicaoId}
-                                    onValueChange={(value) => setFormData({ ...formData, instituicaoId: value, orgaoId: '' })}
+                                    onValueChange={handleInstituicaoChange}
                                 >
                                     <SelectTrigger className={errors.instituicaoId ? 'border-red-500' : ''}>
                                         <SelectValue placeholder="Selecione a instituição" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {mockInstituicoes.map((inst) => (
+                                        {instituicoes.map((inst) => (
                                             <SelectItem key={inst.id} value={inst.id}>
                                                 {inst.codigo} - {inst.nome}
                                             </SelectItem>
@@ -247,22 +306,29 @@ export default function EditarUnidadePage() {
                                         Órgão<span className="text-red-500 ml-1">*</span>
                                     </Label>
                                 </div>
-                                <Select
-                                    value={formData.orgaoId}
-                                    onValueChange={(value) => setFormData({ ...formData, orgaoId: value })}
-                                    disabled={!formData.instituicaoId}
-                                >
-                                    <SelectTrigger className={errors.orgaoId ? 'border-red-500' : ''}>
-                                        <SelectValue placeholder={formData.instituicaoId ? 'Selecione o órgão' : 'Selecione a instituição primeiro'} />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {orgaosFiltrados.map((orgao) => (
-                                            <SelectItem key={orgao.id} value={orgao.id}>
-                                                {orgao.codigo} - {orgao.nome}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                {loadingOrgaos ? (
+                                    <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted">
+                                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                        <span className="text-sm text-muted-foreground">Carregando...</span>
+                                    </div>
+                                ) : (
+                                    <Select
+                                        value={formData.orgaoId}
+                                        onValueChange={(value) => setFormData({ ...formData, orgaoId: value })}
+                                        disabled={!formData.instituicaoId}
+                                    >
+                                        <SelectTrigger className={errors.orgaoId ? 'border-red-500' : ''}>
+                                            <SelectValue placeholder={formData.instituicaoId ? 'Selecione o órgão' : 'Selecione a instituição primeiro'} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {orgaos.map((orgao) => (
+                                                <SelectItem key={orgao.id} value={orgao.id}>
+                                                    {orgao.codigo} - {orgao.nome}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                )}
                                 {errors.orgaoId && <p className="text-sm text-red-500">{errors.orgaoId}</p>}
                             </div>
                         </div>

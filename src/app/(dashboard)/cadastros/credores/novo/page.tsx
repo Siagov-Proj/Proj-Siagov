@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,17 +27,9 @@ import { maskCnpj, maskCpf, maskCep, maskTelefone, maskNitPisPasep, maskInscrica
 import { TIPOS_CREDOR, TIPOS_CONTA_BANCARIA, ESTADOS_BRASIL, FIELD_LIMITS } from '@/utils/constants';
 import type { ICredor } from '@/types';
 import { credoresService } from '@/services/api/credoresService';
+import { bancosService, IBancoDB } from '@/services/api/bancosService';
+import { agenciasService, IAgenciaDB } from '@/services/api/agenciasService';
 
-// Mock de bancos
-const mockBancos = [
-    { id: '1', codigo: '001', nome: 'Banco do Brasil' },
-    { id: '2', codigo: '104', nome: 'Caixa Econômica Federal' },
-    { id: '3', codigo: '341', nome: 'Itaú Unibanco' },
-    { id: '4', codigo: '033', nome: 'Santander' },
-    { id: '5', codigo: '237', nome: 'Bradesco' },
-];
-
-// Estado vazio do formulário
 const formDataVazio = {
     tipoCredor: '' as ICredor['tipoCredor'] | '',
     identificador: '',
@@ -94,6 +86,47 @@ export default function NovoCredorPage() {
     const [erros, setErros] = useState<Record<string, string>>({});
     const [abaAtiva, setAbaAtiva] = useState('identificacao');
     const [saving, setSaving] = useState(false);
+    const [bancos, setBancos] = useState<IBancoDB[]>([]);
+    const [agencias, setAgencias] = useState<IAgenciaDB[]>([]);
+    const [loadingBancos, setLoadingBancos] = useState(true);
+    const [loadingAgencias, setLoadingAgencias] = useState(false);
+
+    useEffect(() => {
+        carregarBancos();
+    }, []);
+
+    useEffect(() => {
+        if (formData.bancoId) {
+            carregarAgencias(formData.bancoId);
+        } else {
+            setAgencias([]);
+        }
+    }, [formData.bancoId]);
+
+    const carregarBancos = async () => {
+        try {
+            setLoadingBancos(true);
+            const data = await bancosService.listar();
+            setBancos(data);
+        } catch (error) {
+            console.error('Erro ao carregar bancos:', error);
+            alert('Erro ao carregar bancos.');
+        } finally {
+            setLoadingBancos(false);
+        }
+    };
+
+    const carregarAgencias = async (bancoId: string) => {
+        try {
+            setLoadingAgencias(true);
+            const data = await agenciasService.listarPorBanco(bancoId);
+            setAgencias(data);
+        } catch (error) {
+            console.error('Erro ao carregar agências:', error);
+        } finally {
+            setLoadingAgencias(false);
+        }
+    };
 
     const validar = (): boolean => {
         const novosErros: Record<string, string> = {};
@@ -585,16 +618,26 @@ export default function NovoCredorPage() {
                         <TabsContent value="bancarios" className="space-y-4">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div className="space-y-2">
-                                    <Label>Banco</Label>
+                                    <div className="flex items-center gap-1">
+                                        <Label>Banco</Label>
+                                        {loadingBancos && <Loader2 className="h-3 w-3 animate-spin" />}
+                                    </div>
                                     <Select
                                         value={formData.bancoId}
-                                        onValueChange={(v) => setFormData({ ...formData, bancoId: v })}
+                                        onValueChange={(v) => {
+                                            setFormData({
+                                                ...formData,
+                                                bancoId: v,
+                                                agencia: '',
+                                                digitoAgencia: ''
+                                            });
+                                        }}
                                     >
                                         <SelectTrigger>
                                             <SelectValue placeholder="Selecione o banco" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            {mockBancos.map((b) => (
+                                            {bancos.map((b) => (
                                                 <SelectItem key={b.id} value={b.id}>
                                                     {b.codigo} - {b.nome}
                                                 </SelectItem>
@@ -621,12 +664,44 @@ export default function NovoCredorPage() {
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                                 <div className="space-y-2">
-                                    <Label>Agência</Label>
-                                    <Input
-                                        value={formData.agencia}
-                                        onChange={(e) => setFormData({ ...formData, agencia: e.target.value })}
-                                        maxLength={6}
-                                    />
+                                    <div className="flex items-center gap-1">
+                                        <Label>Agência</Label>
+                                        {loadingAgencias && <Loader2 className="h-3 w-3 animate-spin" />}
+                                    </div>
+                                    {agencias.length > 0 ? (
+                                        <Select
+                                            value={agencias.find(a => a.codigo === formData.agencia)?.id || ''}
+                                            onValueChange={(id) => {
+                                                const agencia = agencias.find(a => a.id === id);
+                                                if (agencia) {
+                                                    setFormData({
+                                                        ...formData,
+                                                        agencia: agencia.codigo,
+                                                        digitoAgencia: agencia.digito_verificador || ''
+                                                    });
+                                                }
+                                            }}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Selecione a agência" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {agencias.map((a) => (
+                                                    <SelectItem key={a.id} value={a.id}>
+                                                        {a.codigo} - {a.nome}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    ) : (
+                                        <Input
+                                            value={formData.agencia}
+                                            onChange={(e) => setFormData({ ...formData, agencia: e.target.value })}
+                                            maxLength={6}
+                                            placeholder={formData.bancoId ? "Digite ou cadastre a agência" : "Selecione o banco primeiro"}
+                                            disabled={!formData.bancoId}
+                                        />
+                                    )}
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Dígito Agência</Label>

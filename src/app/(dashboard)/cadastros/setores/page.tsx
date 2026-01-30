@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -14,46 +14,34 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Search, Pencil, Trash2, BriefcaseBusiness, ArrowLeft } from 'lucide-react';
-import type { ISetor } from '@/types';
-
-// Mock para cascata: Instituição → Órgão → UG
-const mockUnidadesGestoras = [
-    { id: '1', orgaoId: '1', nome: 'Coordenadoria de Orçamento', codigo: '00001' },
-    { id: '2', orgaoId: '1', nome: 'Coordenadoria de Contabilidade', codigo: '00002' },
-    { id: '3', orgaoId: '2', nome: 'Coordenadoria de RH', codigo: '00003' },
-];
-
-const setoresIniciais: ISetor[] = [
-    {
-        id: '1',
-        codigo: '0001',
-        instituicaoId: '1',
-        orgaoId: '1',
-        unidadeGestoraId: '1',
-        nome: 'Setor de Licitações',
-        nomeAbreviado: 'SELIC',
-        responsavel: 'Maria da Silva',
-        ramal: '1234',
-        emailPrimario: 'maria@setor.gov.br',
-        telefone01: '(00) 1234-5678',
-        ativo: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-    },
-];
+import { Plus, Search, Pencil, Trash2, BriefcaseBusiness, ArrowLeft, Loader2 } from 'lucide-react';
+import { setoresService, ISetorDB } from '@/services/api';
 
 export default function SetoresPage() {
     const router = useRouter();
-    const [setores, setSetores] = useState<ISetor[]>(setoresIniciais);
+    const [setores, setSetores] = useState<ISetorDB[]>([]);
     const [termoBusca, setTermoBusca] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [deleting, setDeleting] = useState<string | null>(null);
 
-    const setoresFiltrados = setores.filter(
-        (setor) =>
-            setor.nome.toLowerCase().includes(termoBusca.toLowerCase()) ||
-            setor.nomeAbreviado.toLowerCase().includes(termoBusca.toLowerCase()) ||
-            setor.codigo.includes(termoBusca)
-    );
+    const carregarSetores = useCallback(async () => {
+        try {
+            setLoading(true);
+            const dados = await setoresService.listar(termoBusca);
+            setSetores(dados);
+        } catch (err) {
+            console.error('Erro ao carregar setores:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, [termoBusca]);
+
+    useEffect(() => {
+        const debounce = setTimeout(() => {
+            carregarSetores();
+        }, 300);
+        return () => clearTimeout(debounce);
+    }, [carregarSetores]);
 
     const handleNovo = () => {
         router.push('/cadastros/setores/novo');
@@ -63,14 +51,19 @@ export default function SetoresPage() {
         router.push(`/cadastros/setores/${id}`);
     };
 
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
         if (confirm('Tem certeza que deseja excluir este setor?')) {
-            setSetores(setores.filter((s) => s.id !== id));
+            try {
+                setDeleting(id);
+                await setoresService.excluir(id);
+                setSetores(setores.filter((s) => s.id !== id));
+            } catch (err) {
+                console.error('Erro ao excluir setor:', err);
+                alert('Erro ao excluir setor. Tente novamente.');
+            } finally {
+                setDeleting(null);
+            }
         }
-    };
-
-    const obterNomeUG = (id: string) => {
-        return mockUnidadesGestoras.find((ug) => ug.id === id)?.nome || '';
     };
 
     return (
@@ -106,7 +99,7 @@ export default function SetoresPage() {
                         <div>
                             <CardTitle>Lista de Setores</CardTitle>
                             <CardDescription>
-                                {setoresFiltrados.length} setor(es) encontrado(s)
+                                {loading ? 'Carregando...' : `${setores.length} setor(es) encontrado(s)`}
                             </CardDescription>
                         </div>
                         <div className="relative w-full sm:w-64">
@@ -121,54 +114,63 @@ export default function SetoresPage() {
                     </div>
                 </CardHeader>
                 <CardContent>
-                    <div className="rounded-md border">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-20">Código</TableHead>
-                                    <TableHead>Nome</TableHead>
-                                    <TableHead className="w-20">Sigla</TableHead>
-                                    <TableHead>Unidade Gestora</TableHead>
-                                    <TableHead>Responsável</TableHead>
-                                    <TableHead className="w-24 text-center">Ações</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {setoresFiltrados.length === 0 ? (
+                    {loading ? (
+                        <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : (
+                        <div className="rounded-md border">
+                            <Table>
+                                <TableHeader>
                                     <TableRow>
-                                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                                            Nenhum setor encontrado
-                                        </TableCell>
+                                        <TableHead className="w-20">Código</TableHead>
+                                        <TableHead>Nome</TableHead>
+                                        <TableHead className="w-20">Sigla</TableHead>
+                                        <TableHead>Responsável</TableHead>
+                                        <TableHead className="w-24 text-center">Ações</TableHead>
                                     </TableRow>
-                                ) : (
-                                    setoresFiltrados.map((setor) => (
-                                        <TableRow key={setor.id}>
-                                            <TableCell className="font-mono">{setor.codigo}</TableCell>
-                                            <TableCell className="font-medium">{setor.nome}</TableCell>
-                                            <TableCell>{setor.nomeAbreviado}</TableCell>
-                                            <TableCell>{obterNomeUG(setor.unidadeGestoraId)}</TableCell>
-                                            <TableCell className="text-sm">{setor.responsavel}</TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center justify-center gap-1">
-                                                    <Button variant="ghost" size="icon" onClick={() => handleEdit(setor.id)}>
-                                                        <Pencil className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => handleDelete(setor.id)}
-                                                        className="text-red-500 hover:text-red-600"
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
+                                </TableHeader>
+                                <TableBody>
+                                    {setores.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                                                Nenhum setor encontrado
                                             </TableCell>
                                         </TableRow>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
+                                    ) : (
+                                        setores.map((setor) => (
+                                            <TableRow key={setor.id}>
+                                                <TableCell className="font-mono">{setor.codigo}</TableCell>
+                                                <TableCell className="font-medium">{setor.nome}</TableCell>
+                                                <TableCell>{setor.nome_abreviado || '-'}</TableCell>
+                                                <TableCell className="text-sm">{setor.responsavel || '-'}</TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        <Button variant="ghost" size="icon" onClick={() => handleEdit(setor.id)}>
+                                                            <Pencil className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => handleDelete(setor.id)}
+                                                            className="text-red-500 hover:text-red-600"
+                                                            disabled={deleting === setor.id}
+                                                        >
+                                                            {deleting === setor.id ? (
+                                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                            ) : (
+                                                                <Trash2 className="h-4 w-4" />
+                                                            )}
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>

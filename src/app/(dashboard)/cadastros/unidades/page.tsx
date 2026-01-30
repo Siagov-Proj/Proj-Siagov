@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -14,57 +14,34 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Search, Pencil, Trash2, Landmark, ArrowLeft } from 'lucide-react';
-import type { IUnidadeGestora } from '@/types';
-
-// Mock data
-const mockOrgaos = [
-    { id: '1', instituicaoId: '1', nome: 'Secretaria de Finanças', codigo: '000001' },
-    { id: '2', instituicaoId: '1', nome: 'Secretaria de Administração', codigo: '000002' },
-    { id: '3', instituicaoId: '2', nome: 'Secretaria de Ensino', codigo: '000003' },
-];
-
-const unidadesIniciais: IUnidadeGestora[] = [
-    {
-        id: '1',
-        codigo: '000001',
-        orgaoId: '1',
-        nome: 'Coordenadoria de Orçamento',
-        nomeAbreviado: 'CORC',
-        cnpj: '00.000.000/0001-01',
-        ordenadorDespesa: 'João da Silva',
-        ugTce: '12345',
-        ugSiafemSigef: '123456',
-        ugSiasg: '123456',
-        tipoUnidadeGestora: 'Gestora',
-        tipoAdministracao: 'Direta',
-        grupoIndireta: undefined,
-        cep: '70000-000',
-        logradouro: 'Esplanada dos Ministérios',
-        numero: 'S/N',
-        complemento: 'Bloco A',
-        bairro: 'Zona Cívico-Administrativa',
-        municipio: 'Brasília',
-        uf: 'DF',
-        emailPrimario: 'contato@ug.gov.br',
-        telefone: '(61) 3333-3333',
-        ativo: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-    },
-];
+import { Plus, Search, Pencil, Trash2, Landmark, ArrowLeft, Loader2 } from 'lucide-react';
+import { unidadesService, IUnidadeGestoraDB } from '@/services/api';
 
 export default function UnidadesGestorasPage() {
     const router = useRouter();
-    const [unidades, setUnidades] = useState<IUnidadeGestora[]>(unidadesIniciais);
+    const [unidades, setUnidades] = useState<IUnidadeGestoraDB[]>([]);
     const [termoBusca, setTermoBusca] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [deleting, setDeleting] = useState<string | null>(null);
 
-    const unidadesFiltradas = unidades.filter(
-        (ug) =>
-            ug.nome.toLowerCase().includes(termoBusca.toLowerCase()) ||
-            ug.nomeAbreviado.toLowerCase().includes(termoBusca.toLowerCase()) ||
-            ug.codigo.includes(termoBusca)
-    );
+    const carregarUnidades = useCallback(async () => {
+        try {
+            setLoading(true);
+            const dados = await unidadesService.listar(termoBusca);
+            setUnidades(dados);
+        } catch (err) {
+            console.error('Erro ao carregar unidades gestoras:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, [termoBusca]);
+
+    useEffect(() => {
+        const debounce = setTimeout(() => {
+            carregarUnidades();
+        }, 300);
+        return () => clearTimeout(debounce);
+    }, [carregarUnidades]);
 
     const handleNovo = () => {
         router.push('/cadastros/unidades/novo');
@@ -74,14 +51,19 @@ export default function UnidadesGestorasPage() {
         router.push(`/cadastros/unidades/${id}`);
     };
 
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
         if (confirm('Tem certeza que deseja excluir esta unidade gestora?')) {
-            setUnidades(unidades.filter((u) => u.id !== id));
+            try {
+                setDeleting(id);
+                await unidadesService.excluir(id);
+                setUnidades(unidades.filter((u) => u.id !== id));
+            } catch (err) {
+                console.error('Erro ao excluir unidade gestora:', err);
+                alert('Erro ao excluir unidade gestora. Tente novamente.');
+            } finally {
+                setDeleting(null);
+            }
         }
-    };
-
-    const obterNomeOrgao = (id: string) => {
-        return mockOrgaos.find((o) => o.id === id)?.nome || '';
     };
 
     return (
@@ -106,7 +88,7 @@ export default function UnidadesGestorasPage() {
                 </div>
                 <Button onClick={handleNovo}>
                     <Plus className="mr-2 h-4 w-4" />
-                    Novo Unidade
+                    Nova Unidade
                 </Button>
             </div>
 
@@ -117,7 +99,7 @@ export default function UnidadesGestorasPage() {
                         <div>
                             <CardTitle>Lista de Unidades Gestoras</CardTitle>
                             <CardDescription>
-                                {unidadesFiltradas.length} unidade(s) encontrada(s)
+                                {loading ? 'Carregando...' : `${unidades.length} unidade(s) encontrada(s)`}
                             </CardDescription>
                         </div>
                         <div className="relative w-full sm:w-64">
@@ -132,58 +114,67 @@ export default function UnidadesGestorasPage() {
                     </div>
                 </CardHeader>
                 <CardContent>
-                    <div className="rounded-md border">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-20">Código</TableHead>
-                                    <TableHead>Nome</TableHead>
-                                    <TableHead className="w-20">Sigla</TableHead>
-                                    <TableHead>Órgão</TableHead>
-                                    <TableHead>Ordenador</TableHead>
-                                    <TableHead className="w-24 text-center">Ações</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {unidadesFiltradas.length === 0 ? (
+                    {loading ? (
+                        <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : (
+                        <div className="rounded-md border">
+                            <Table>
+                                <TableHeader>
                                     <TableRow>
-                                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                                            Nenhuma unidade gestora encontrada
-                                        </TableCell>
+                                        <TableHead className="w-20">Código</TableHead>
+                                        <TableHead>Nome</TableHead>
+                                        <TableHead className="w-20">Sigla</TableHead>
+                                        <TableHead>Ordenador</TableHead>
+                                        <TableHead className="w-24 text-center">Ações</TableHead>
                                     </TableRow>
-                                ) : (
-                                    unidadesFiltradas.map((ug) => (
-                                        <TableRow key={ug.id}>
-                                            <TableCell className="font-mono">{ug.codigo}</TableCell>
-                                            <TableCell className="font-medium">{ug.nome}</TableCell>
-                                            <TableCell>{ug.nomeAbreviado}</TableCell>
-                                            <TableCell>{obterNomeOrgao(ug.orgaoId)}</TableCell>
-                                            <TableCell className="text-sm">{ug.ordenadorDespesa}</TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center justify-center gap-1">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => handleEdit(ug.id)}
-                                                    >
-                                                        <Pencil className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => handleDelete(ug.id)}
-                                                        className="text-red-500 hover:text-red-600"
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
+                                </TableHeader>
+                                <TableBody>
+                                    {unidades.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                                                Nenhuma unidade gestora encontrada
                                             </TableCell>
                                         </TableRow>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
+                                    ) : (
+                                        unidades.map((ug) => (
+                                            <TableRow key={ug.id}>
+                                                <TableCell className="font-mono">{ug.codigo}</TableCell>
+                                                <TableCell className="font-medium">{ug.nome}</TableCell>
+                                                <TableCell>{ug.nome_abreviado || '-'}</TableCell>
+                                                <TableCell className="text-sm">{ug.ordenador_despesa || '-'}</TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => handleEdit(ug.id)}
+                                                        >
+                                                            <Pencil className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => handleDelete(ug.id)}
+                                                            className="text-red-500 hover:text-red-600"
+                                                            disabled={deleting === ug.id}
+                                                        >
+                                                            {deleting === ug.id ? (
+                                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                            ) : (
+                                                                <Trash2 className="h-4 w-4" />
+                                                            )}
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>

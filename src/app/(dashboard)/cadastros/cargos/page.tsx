@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -14,43 +14,34 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Search, Pencil, Trash2, UserCheck, ArrowLeft } from 'lucide-react';
-import type { ICargo } from '@/types';
-
-// Mock data
-const mockSetores = [
-    { id: '1', unidadeGestoraId: '1', nome: 'Setor de Licitações' },
-    { id: '2', unidadeGestoraId: '1', nome: 'Setor de Contratos' },
-    { id: '3', unidadeGestoraId: '3', nome: 'Setor de Pessoal' },
-];
-
-const cargosIniciais: ICargo[] = [
-    {
-        id: '1',
-        codigo: '001',
-        instituicaoId: '1',
-        orgaoId: '1',
-        unidadeGestoraId: '1',
-        setorId: '1',
-        nome: 'Analista de Licitações',
-        descricao: 'Responsável pela análise de processos licitatórios',
-        nivel: 'Superior',
-        ativo: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-    },
-];
+import { Plus, Search, Pencil, Trash2, UserCheck, ArrowLeft, Loader2 } from 'lucide-react';
+import { cargosService, ICargoDB } from '@/services/api';
 
 export default function CargosPage() {
     const router = useRouter();
-    const [cargos, setCargos] = useState<ICargo[]>(cargosIniciais);
+    const [cargos, setCargos] = useState<ICargoDB[]>([]);
     const [termoBusca, setTermoBusca] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [deleting, setDeleting] = useState<string | null>(null);
 
-    const cargosFiltrados = cargos.filter(
-        (cargo) =>
-            cargo.nome.toLowerCase().includes(termoBusca.toLowerCase()) ||
-            cargo.codigo.includes(termoBusca)
-    );
+    const carregarCargos = useCallback(async () => {
+        try {
+            setLoading(true);
+            const dados = await cargosService.listar(termoBusca);
+            setCargos(dados);
+        } catch (err) {
+            console.error('Erro ao carregar cargos:', err);
+        } finally {
+            setLoading(false);
+        }
+    }, [termoBusca]);
+
+    useEffect(() => {
+        const debounce = setTimeout(() => {
+            carregarCargos();
+        }, 300);
+        return () => clearTimeout(debounce);
+    }, [carregarCargos]);
 
     const handleNovo = () => {
         router.push('/cadastros/cargos/novo');
@@ -60,14 +51,19 @@ export default function CargosPage() {
         router.push(`/cadastros/cargos/${id}`);
     };
 
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
         if (confirm('Tem certeza que deseja excluir este cargo?')) {
-            setCargos(cargos.filter((c) => c.id !== id));
+            try {
+                setDeleting(id);
+                await cargosService.excluir(id);
+                setCargos(cargos.filter((c) => c.id !== id));
+            } catch (err) {
+                console.error('Erro ao excluir cargo:', err);
+                alert('Erro ao excluir cargo. Tente novamente.');
+            } finally {
+                setDeleting(null);
+            }
         }
-    };
-
-    const obterNomeSetor = (id: string) => {
-        return mockSetores.find((s) => s.id === id)?.nome || '';
     };
 
     return (
@@ -103,7 +99,7 @@ export default function CargosPage() {
                         <div>
                             <CardTitle>Lista de Cargos</CardTitle>
                             <CardDescription>
-                                {cargosFiltrados.length} cargo(s) encontrado(s)
+                                {loading ? 'Carregando...' : `${cargos.length} cargo(s) encontrado(s)`}
                             </CardDescription>
                         </div>
                         <div className="relative w-full sm:w-64">
@@ -118,56 +114,65 @@ export default function CargosPage() {
                     </div>
                 </CardHeader>
                 <CardContent>
-                    <div className="rounded-md border">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead className="w-20">Código</TableHead>
-                                    <TableHead>Nome</TableHead>
-                                    <TableHead>Setor</TableHead>
-                                    <TableHead>Nível</TableHead>
-                                    <TableHead className="w-24 text-center">Ações</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {cargosFiltrados.length === 0 ? (
+                    {loading ? (
+                        <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : (
+                        <div className="rounded-md border">
+                            <Table>
+                                <TableHeader>
                                     <TableRow>
-                                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                                            Nenhum cargo encontrado
-                                        </TableCell>
+                                        <TableHead className="w-20">Código</TableHead>
+                                        <TableHead>Nome</TableHead>
+                                        <TableHead>Nível</TableHead>
+                                        <TableHead className="w-24 text-center">Ações</TableHead>
                                     </TableRow>
-                                ) : (
-                                    cargosFiltrados.map((cargo) => (
-                                        <TableRow key={cargo.id}>
-                                            <TableCell className="font-mono">{cargo.codigo}</TableCell>
-                                            <TableCell className="font-medium">{cargo.nome}</TableCell>
-                                            <TableCell>{obterNomeSetor(cargo.setorId)}</TableCell>
-                                            <TableCell className="text-sm">{cargo.nivel}</TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center justify-center gap-1">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => handleEdit(cargo.id)}
-                                                    >
-                                                        <Pencil className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => handleDelete(cargo.id)}
-                                                        className="text-red-500 hover:text-red-600"
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
+                                </TableHeader>
+                                <TableBody>
+                                    {cargos.length === 0 ? (
+                                        <TableRow>
+                                            <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                                                Nenhum cargo encontrado
                                             </TableCell>
                                         </TableRow>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
+                                    ) : (
+                                        cargos.map((cargo) => (
+                                            <TableRow key={cargo.id}>
+                                                <TableCell className="font-mono">{cargo.codigo}</TableCell>
+                                                <TableCell className="font-medium">{cargo.nome}</TableCell>
+                                                <TableCell className="text-sm">{cargo.nivel || '-'}</TableCell>
+                                                <TableCell>
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => handleEdit(cargo.id)}
+                                                        >
+                                                            <Pencil className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            onClick={() => handleDelete(cargo.id)}
+                                                            className="text-red-500 hover:text-red-600"
+                                                            disabled={deleting === cargo.id}
+                                                        >
+                                                            {deleting === cargo.id ? (
+                                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                            ) : (
+                                                                <Trash2 className="h-4 w-4" />
+                                                            )}
+                                                        </Button>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>
