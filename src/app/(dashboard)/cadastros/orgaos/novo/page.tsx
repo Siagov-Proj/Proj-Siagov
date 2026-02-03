@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -18,13 +18,8 @@ import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { maskCnpj, maskCodigoComZeros } from '@/utils/masks';
 import { PODERES, FIELD_LIMITS } from '@/utils/constants';
 import type { IOrgao } from '@/types';
-import { ArrowLeft } from 'lucide-react';
-
-const mockInstituicoes = [
-    { id: '1', nome: 'Ministério da Fazenda', codigo: '001' },
-    { id: '2', nome: 'Ministério da Educação', codigo: '002' },
-    { id: '3', nome: 'Ministério da Saúde', codigo: '003' },
-];
+import { ArrowLeft, Loader2 } from 'lucide-react';
+import { instituicoesService, IInstituicaoDB, orgaosService } from '@/services/api';
 
 const emptyFormData = {
     codigo: '000003', // Mock auto-generated
@@ -44,6 +39,24 @@ export default function NovoOrgaoPage() {
     const router = useRouter();
     const [formData, setFormData] = useState(emptyFormData);
     const [errors, setErrors] = useState<Record<string, string>>({});
+    const [instituicoes, setInstituicoes] = useState<IInstituicaoDB[]>([]);
+    const [loadingInstituicoes, setLoadingInstituicoes] = useState(true);
+
+    const carregarInstituicoes = useCallback(async () => {
+        try {
+            setLoadingInstituicoes(true);
+            const data = await instituicoesService.listar();
+            setInstituicoes(data);
+        } catch (error) {
+            console.error('Erro ao carregar instituições:', error);
+        } finally {
+            setLoadingInstituicoes(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        carregarInstituicoes();
+    }, [carregarInstituicoes]);
 
     const validate = (): boolean => {
         const newErrors: Record<string, string> = {};
@@ -58,10 +71,34 @@ export default function NovoOrgaoPage() {
         return Object.keys(newErrors).length === 0;
     };
 
-    const handleSalvar = () => {
+    const [saving, setSaving] = useState(false);
+
+    const handleSalvar = async () => {
         if (!validate()) return;
-        console.log('Salvando novo órgão:', formData);
-        router.push('/cadastros/orgaos');
+
+        try {
+            setSaving(true);
+            await orgaosService.criar({
+                codigo: formData.codigo,
+                instituicao_id: formData.instituicaoId,
+                poder_vinculado: formData.poderVinculado,
+                nome: formData.nome,
+                sigla: formData.sigla,
+                cnpj: formData.cnpj,
+                codigo_siasg: formData.codigoSiasg,
+                ug_tce: formData.ugTce,
+                ug_siafem_sigef: formData.ugSiafemSigef,
+                nome_anterior: formData.nomeAnterior,
+                nome_abreviado_anterior: formData.nomeAbreviadoAnterior,
+                ativo: true,
+            });
+            router.push('/cadastros/orgaos');
+        } catch (err) {
+            console.error('Erro ao salvar órgão:', err);
+            alert('Erro ao salvar órgão. Tente novamente.');
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleCancelar = () => {
@@ -123,21 +160,28 @@ export default function NovoOrgaoPage() {
                                     </Label>
                                     <FieldTooltip content="Instituição à qual o órgão está vinculado" />
                                 </div>
-                                <Select
-                                    value={formData.instituicaoId}
-                                    onValueChange={(value) => setFormData({ ...formData, instituicaoId: value })}
-                                >
-                                    <SelectTrigger className={errors.instituicaoId ? 'border-red-500' : ''}>
-                                        <SelectValue placeholder="Selecione a instituição" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {mockInstituicoes.map((inst) => (
-                                            <SelectItem key={inst.id} value={inst.id}>
-                                                {inst.codigo} - {inst.nome}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                {loadingInstituicoes ? (
+                                    <div className="flex items-center gap-2 h-10 border rounded-md px-3">
+                                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                                        <span className="text-sm text-muted-foreground">Carregando...</span>
+                                    </div>
+                                ) : (
+                                    <Select
+                                        value={formData.instituicaoId}
+                                        onValueChange={(value) => setFormData({ ...formData, instituicaoId: value })}
+                                    >
+                                        <SelectTrigger className={errors.instituicaoId ? 'border-red-500' : ''}>
+                                            <SelectValue placeholder="Selecione a instituição" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {instituicoes.map((inst) => (
+                                                <SelectItem key={inst.id} value={inst.id}>
+                                                    {inst.codigo} - {inst.nome}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                )}
                                 {errors.instituicaoId && <p className="text-sm text-red-500">{errors.instituicaoId}</p>}
                             </div>
                         </div>
@@ -323,6 +367,7 @@ export default function NovoOrgaoPage() {
                 onCancelar={handleCancelar}
                 onLimpar={handleLimpar}
                 mode="create"
+                isLoading={saving}
             />
         </div>
     );

@@ -158,12 +158,7 @@ export default function DocumentosPage() {
                         Documentos gerados e vinculados aos processos
                     </p>
                 </div>
-                <Button asChild>
-                    <Link href="/documentos/novo">
-                        <Plus className="mr-2 h-4 w-4" />
-                        Novo Documento
-                    </Link>
-                </Button>
+                <div></div>
             </div>
 
             {/* Layout Two-Column */}

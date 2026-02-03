@@ -15,11 +15,11 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ActionBar } from '@/components/ui/action-bar';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
-import { ArrowLeft, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { maskCpf } from '@/utils/masks';
 import { FIELD_LIMITS } from '@/utils/constants';
+import { createUserWithInvite } from '../actions';
 import {
-    usuariosService,
     instituicoesService,
     orgaosService,
     unidadesService,
@@ -57,15 +57,12 @@ const formDataVazio = {
     setorId: '',
     cargoId: '',
     perfilAcesso: '',
-    senha: '',
-    confirmarSenha: '',
 };
 
 export default function NovoUsuarioPage() {
     const router = useRouter();
     const [formData, setFormData] = useState(formDataVazio);
     const [erros, setErros] = useState<Record<string, string>>({});
-    const [mostrarSenha, setMostrarSenha] = useState(false);
     const [saving, setSaving] = useState(false);
 
     // Listas para selects
@@ -74,12 +71,7 @@ export default function NovoUsuarioPage() {
     const [unidades, setUnidades] = useState<IUnidadeGestoraDB[]>([]);
     const [setores, setSetores] = useState<ISetorDB[]>([]);
     const [cargos, setCargos] = useState<ICargoDB[]>([]);
-    const [unidadesOrigem, setUnidadesOrigem] = useState<IUnidadeGestoraDB[]>([]); // Para UG Origem, carregamos todas ou filtramos? 
-    // Assumindo que UG Origem pode ser qualquer uma, vamos carregar todas quando necessário ou usar a mesma lista se for o caso.
-    // O mock usava a mesma lista filtrada? Não, usava mockUnidadesGestoras.
-    // Vamos carregar todas as unidades para UG Origem no início, ou filtrar por instituição?
-    // Geralmente UG Origem é uma lista geral. O serviço unidadesService.listar() pode ser pesado se tiver muitas.
-    // Vamos carregar lista vazia e popular se precisar, ou carregar junto com instituicoes.
+    const [unidadesOrigem, setUnidadesOrigem] = useState<IUnidadeGestoraDB[]>([]);
 
     // Loading states
     const [loadingInstituicoes, setLoadingInstituicoes] = useState(true);
@@ -215,15 +207,6 @@ export default function NovoUsuarioPage() {
         if (!formData.unidadeGestoraId) novosErros.unidadeGestoraId = 'Unidade Gestora é obrigatória';
         if (!formData.setorId) novosErros.setorId = 'Setor é obrigatório';
 
-        // Validação de senha condicional? Não, é create, obrigatório se fosse auth.
-        // Como o serviço não aceita senha, vamos apenas validar mas não enviar (simulando que seria usado)
-        // Ou removendo a obrigatoriedade se não for usado. Mantendo como obrigatório por consistência visual.
-        if (!formData.senha) novosErros.senha = 'Senha é obrigatória';
-        else if (formData.senha.length < 8) novosErros.senha = 'Senha deve ter no mínimo 8 caracteres';
-        if (formData.senha !== formData.confirmarSenha) {
-            novosErros.confirmarSenha = 'As senhas não conferem';
-        }
-
         setErros(novosErros);
         return Object.keys(novosErros).length === 0;
     };
@@ -233,30 +216,37 @@ export default function NovoUsuarioPage() {
 
         try {
             setSaving(true);
-            await usuariosService.criar({
+            const result = await createUserWithInvite({
                 codigo: formData.codigo,
                 nome: formData.nome,
                 cpf: formData.cpf.replace(/\D/g, ''),
-                nome_credor: formData.nomeCredor,
+                nomeCredor: formData.nomeCredor,
                 matricula: formData.matricula,
                 vinculo: formData.vinculo,
-                email_institucional: formData.emailInstitucional,
-                email_pessoal: formData.emailPessoal,
-                telefone_01: formData.telefone01,
-                telefone_whatsapp: formData.telefoneWhatsApp,
-                instituicao_id: formData.instituicaoId,
-                orgao_id: formData.orgaoId,
-                unidade_gestora_id: formData.unidadeGestoraId,
-                ug_origem_id: formData.ugOrigem,
-                setor_id: formData.setorId,
-                cargo_id: formData.cargoId || undefined, // Opcional no form? IUsuarioDB tem cargo_id? Sim, opcional.
-                permissoes: [formData.perfilAcesso].filter(Boolean), // Array de strings
+                emailInstitucional: formData.emailInstitucional,
+                emailPessoal: formData.emailPessoal,
+                telefone01: formData.telefone01,
+                telefoneWhatsApp: formData.telefoneWhatsApp,
+                instituicaoId: formData.instituicaoId,
+                orgaoId: formData.orgaoId,
+                unidadeGestoraId: formData.unidadeGestoraId,
+                ugOrigemId: formData.ugOrigem,
+                setorId: formData.setorId,
+                cargoId: formData.cargoId || undefined,
+                perfilAcesso: formData.perfilAcesso || 'consulta',
                 ativo: true,
             });
+
+            if (result.error) {
+                alert(result.error);
+                return;
+            }
+
+            alert('Usuário criado e convite enviado com sucesso! Verifique a caixa de entrada.');
             router.push('/cadastros/usuarios');
         } catch (err) {
             console.error('Erro ao criar usuário:', err);
-            alert('Erro ao criar usuário. Verifique se o CPF já existe.');
+            alert('Erro inesperado ao criar usuário.');
         } finally {
             setSaving(false);
         }
@@ -285,7 +275,7 @@ export default function NovoUsuarioPage() {
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight">Novo Usuário</h1>
                     <p className="text-muted-foreground">
-                        Cadastro de novo usuário do sistema
+                        Cadastro e convite de novo usuário do sistema
                     </p>
                 </div>
             </div>
@@ -613,62 +603,13 @@ export default function NovoUsuarioPage() {
                 </CardContent>
             </Card>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle>Senha de Acesso (Demo)</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="senha">
-                                Senha<span className="text-red-500 ml-1">*</span>
-                            </Label>
-                            <div className="relative">
-                                <Input
-                                    id="senha"
-                                    type={mostrarSenha ? 'text' : 'password'}
-                                    value={formData.senha}
-                                    onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
-                                    placeholder="Mínimo 8 caracteres"
-                                    className={erros.senha ? 'border-red-500 pr-10' : 'pr-10'}
-                                />
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    className="absolute right-0 top-0 h-full"
-                                    onClick={() => setMostrarSenha(!mostrarSenha)}
-                                >
-                                    {mostrarSenha ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                </Button>
-                            </div>
-                            {erros.senha && <p className="text-sm text-red-500">{erros.senha}</p>}
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label htmlFor="confirmarSenha">
-                                Confirmar Senha<span className="text-red-500 ml-1">*</span>
-                            </Label>
-                            <Input
-                                id="confirmarSenha"
-                                type={mostrarSenha ? 'text' : 'password'}
-                                value={formData.confirmarSenha}
-                                onChange={(e) => setFormData({ ...formData, confirmarSenha: e.target.value })}
-                                placeholder="Repita a senha"
-                                className={erros.confirmarSenha ? 'border-red-500' : ''}
-                            />
-                            {erros.confirmarSenha && <p className="text-sm text-red-500">{erros.confirmarSenha}</p>}
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-
             <ActionBar
                 onSalvar={handleSalvar}
                 onCancelar={handleCancelar}
                 onLimpar={handleLimpar}
                 mode="create"
                 isLoading={saving}
+                salvarLabel="Criar e Convidar"
             />
         </div>
     );

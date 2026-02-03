@@ -34,7 +34,6 @@ export const processosService = {
                 *,
                 setor_atual:setores(nome)
             `)
-            .eq('excluido', false)
             .order('created_at', { ascending: false });
 
         if (termoBusca) {
@@ -67,8 +66,6 @@ export const processosService = {
         const { data, error } = await supabase
             .from(TABLE_NAME)
             .select('id, numero, assunto')
-            .eq('excluido', false)
-            .eq('ativo', true)
             .order('numero', { ascending: false })
             .limit(50); // Limit for dropdown performance
 

@@ -22,6 +22,11 @@ export interface IOrgaoDB {
     excluido: boolean;
     created_at: string;
     updated_at: string;
+    instituicao?: {
+        id: string;
+        nome: string;
+        codigo: string;
+    };
 }
 
 const TABLE_NAME = 'orgaos';
@@ -31,7 +36,7 @@ export const orgaosService = {
         const supabase = getSupabaseClient();
         let query = supabase
             .from(TABLE_NAME)
-            .select('*')
+            .select('*, instituicao:instituicoes(id, nome, codigo)')
             .eq('excluido', false)
             .order('nome', { ascending: true });
 
@@ -53,7 +58,7 @@ export const orgaosService = {
         const supabase = getSupabaseClient();
         const { data, error } = await supabase
             .from(TABLE_NAME)
-            .select('*')
+            .select('*, instituicao:instituicoes(id, nome, codigo)')
             .eq('id', id)
             .eq('excluido', false)
             .single();
@@ -122,7 +127,7 @@ export const orgaosService = {
         const supabase = getSupabaseClient();
         const { data, error } = await supabase
             .from(TABLE_NAME)
-            .select('*')
+            .select('*, instituicao:instituicoes(id, nome, codigo)')
             .eq('instituicao_id', instituicaoId)
             .eq('excluido', false)
             .order('nome', { ascending: true });

@@ -25,6 +25,11 @@ export interface IInstituicaoDB {
     excluido: boolean;
     created_at: string;
     updated_at: string;
+    esfera?: {
+        id: string;
+        nome: string;
+        sigla: string;
+    };
 }
 
 const TABLE_NAME = 'instituicoes';
@@ -34,7 +39,7 @@ export const instituicoesService = {
         const supabase = getSupabaseClient();
         let query = supabase
             .from(TABLE_NAME)
-            .select('*')
+            .select('*, esfera:esferas(id, nome, sigla)')
             .eq('excluido', false)
             .order('nome', { ascending: true });
 
@@ -56,7 +61,7 @@ export const instituicoesService = {
         const supabase = getSupabaseClient();
         const { data, error } = await supabase
             .from(TABLE_NAME)
-            .select('*')
+            .select('*, esfera:esferas(id, nome, sigla)')
             .eq('id', id)
             .eq('excluido', false)
             .single();
@@ -125,7 +130,7 @@ export const instituicoesService = {
         const supabase = getSupabaseClient();
         const { data, error } = await supabase
             .from(TABLE_NAME)
-            .select('*')
+            .select('*, esfera:esferas(id, nome, sigla)')
             .eq('esfera_id', esferaId)
             .eq('excluido', false)
             .order('nome', { ascending: true });
@@ -136,5 +141,20 @@ export const instituicoesService = {
         }
 
         return data as IInstituicaoDB[];
+    },
+
+    async contar(): Promise<number> {
+        const supabase = getSupabaseClient();
+        const { count, error } = await supabase
+            .from(TABLE_NAME)
+            .select('*', { count: 'exact', head: true })
+            .eq('excluido', false);
+
+        if (error) {
+            console.error('Erro ao contar instituições:', error);
+            throw error;
+        }
+
+        return count || 0;
     }
 };
