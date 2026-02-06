@@ -49,7 +49,8 @@ export async function createUserWithInvite(data: CreateUserParams) {
                 nome: data.nome,
                 cpf: data.cpf,
                 perfil: data.perfilAcesso // Store role in metadata
-            }
+            },
+            redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/callback`
         }
     );
 

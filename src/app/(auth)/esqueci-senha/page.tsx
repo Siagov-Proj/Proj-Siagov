@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeft, Loader2, Mail, CheckCircle } from 'lucide-react';
 import Link from 'next/link';
+import { recoverPassword } from '@/app/auth/actions';
 
 export default function EsqueciSenhaPage() {
     const router = useRouter();
@@ -21,16 +22,23 @@ export default function EsqueciSenhaPage() {
         setError('');
         setIsLoading(true);
 
-        // Simulação de envio de email
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        const formData = new FormData();
+        formData.append('email', email);
 
-        if (email) {
-            setIsSuccess(true);
-        } else {
-            setError('Por favor, informe seu e-mail');
+        try {
+            const result = await recoverPassword(formData);
+
+            if (result?.error) {
+                setError(result.error);
+            } else {
+                setIsSuccess(true);
+            }
+        } catch (err) {
+            console.error('Password recovery error:', err);
+            setError('Ocorreu um erro ao tentar enviar o email.');
+        } finally {
+            setIsLoading(false);
         }
-
-        setIsLoading(false);
     };
 
     if (isSuccess) {
@@ -87,7 +95,7 @@ export default function EsqueciSenhaPage() {
                 </CardHeader>
 
                 <form onSubmit={handleSubmit}>
-                    <CardContent className="space-y-4">
+                    <CardContent className="space-y-4 pb-8">
                         {error && (
                             <div className="p-3 text-sm text-red-500 bg-red-50 dark:bg-red-950 rounded-md">
                                 {error}

@@ -226,25 +226,26 @@ export default function NovoCargoPage() {
                 </CardHeader>
                 <CardContent>
                     <div className="grid gap-6">
-                        {/* Código */}
-                        <div className="space-y-2">
-                            <div className="flex items-center gap-1">
-                                <Label htmlFor="codigo">Código<span className="text-red-500 ml-1">*</span></Label>
-                                <FieldTooltip content="Código identificador (3 dígitos)" />
+                        {/* Linha 1: Código e Vinculação Hierárquica Completa */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                            {/* Código */}
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-1">
+                                    <Label htmlFor="codigo">Código<span className="text-red-500 ml-1">*</span></Label>
+                                    <FieldTooltip content="Código identificador (3 dígitos)" />
+                                </div>
+                                <Input
+                                    id="codigo"
+                                    value={formData.codigo}
+                                    onChange={(e) => setFormData({ ...formData, codigo: e.target.value.replace(/\D/g, '').substring(0, 3) })}
+                                    maxLength={3}
+                                    placeholder="001"
+                                    className={`font-mono w-full ${errors.codigo ? 'border-red-500' : ''}`}
+                                />
+                                {errors.codigo && <p className="text-sm text-red-500">{errors.codigo}</p>}
                             </div>
-                            <Input
-                                id="codigo"
-                                value={formData.codigo}
-                                onChange={(e) => setFormData({ ...formData, codigo: e.target.value.replace(/\D/g, '').substring(0, 3) })}
-                                maxLength={3}
-                                placeholder="001"
-                                className={`font-mono w-24 ${errors.codigo ? 'border-red-500' : ''}`}
-                            />
-                            {errors.codigo && <p className="text-sm text-red-500">{errors.codigo}</p>}
-                        </div>
 
-                        {/* Cascata: Instituição → Órgão → UG → Setor */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {/* Instituição */}
                             <div className="space-y-2">
                                 <div className="flex items-center gap-1">
                                     <Label>Instituição<span className="text-red-500 ml-1">*</span></Label>
@@ -254,7 +255,7 @@ export default function NovoCargoPage() {
                                     value={formData.instituicaoId}
                                     onValueChange={handleInstituicaoChange}
                                 >
-                                    <SelectTrigger className={errors.instituicaoId ? 'border-red-500' : ''}>
+                                    <SelectTrigger className={`w-full ${errors.instituicaoId ? 'border-red-500' : ''}`}>
                                         <SelectValue placeholder={loadingInstituicoes ? "Carregando..." : "Selecione"} />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -268,6 +269,7 @@ export default function NovoCargoPage() {
                                 {errors.instituicaoId && <p className="text-sm text-red-500">{errors.instituicaoId}</p>}
                             </div>
 
+                            {/* Órgão */}
                             <div className="space-y-2">
                                 <Label>Órgão<span className="text-red-500 ml-1">*</span></Label>
                                 {loadingOrgaos ? (
@@ -281,7 +283,7 @@ export default function NovoCargoPage() {
                                         onValueChange={handleOrgaoChange}
                                         disabled={!formData.instituicaoId}
                                     >
-                                        <SelectTrigger className={errors.orgaoId ? 'border-red-500' : ''}>
+                                        <SelectTrigger className={`w-full ${errors.orgaoId ? 'border-red-500' : ''}`}>
                                             <SelectValue placeholder={formData.instituicaoId ? "Selecione" : "Aguardando..."} />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -295,9 +297,8 @@ export default function NovoCargoPage() {
                                 )}
                                 {errors.orgaoId && <p className="text-sm text-red-500">{errors.orgaoId}</p>}
                             </div>
-                        </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {/* Unidade Gestora */}
                             <div className="space-y-2">
                                 <Label>Unidade Gestora<span className="text-red-500 ml-1">*</span></Label>
                                 {loadingUnidades ? (
@@ -311,7 +312,7 @@ export default function NovoCargoPage() {
                                         onValueChange={handleUnidadeChange}
                                         disabled={!formData.orgaoId}
                                     >
-                                        <SelectTrigger className={errors.unidadeGestoraId ? 'border-red-500' : ''}>
+                                        <SelectTrigger className={`w-full ${errors.unidadeGestoraId ? 'border-red-500' : ''}`}>
                                             <SelectValue placeholder={formData.orgaoId ? "Selecione" : "Aguardando..."} />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -326,6 +327,7 @@ export default function NovoCargoPage() {
                                 {errors.unidadeGestoraId && <p className="text-sm text-red-500">{errors.unidadeGestoraId}</p>}
                             </div>
 
+                            {/* Setor */}
                             <div className="space-y-2">
                                 <div className="flex items-center gap-1">
                                     <Label>Setor<span className="text-red-500 ml-1">*</span></Label>
@@ -341,7 +343,7 @@ export default function NovoCargoPage() {
                                         onValueChange={(valor) => setFormData({ ...formData, setorId: valor })}
                                         disabled={!formData.unidadeGestoraId}
                                     >
-                                        <SelectTrigger className={errors.setorId ? 'border-red-500' : ''}>
+                                        <SelectTrigger className={`w-full ${errors.setorId ? 'border-red-500' : ''}`}>
                                             <SelectValue placeholder={formData.unidadeGestoraId ? "Selecione" : "Aguardando..."} />
                                         </SelectTrigger>
                                         <SelectContent>

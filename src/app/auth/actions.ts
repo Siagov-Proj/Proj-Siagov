@@ -70,28 +70,16 @@ export async function loginWithCpf(formData: FormData) {
 }
 
 export async function recoverPassword(formData: FormData) {
-    const cpf = formData.get('cpf') as string;
+    const email = formData.get('email') as string;
 
-    if (!cpf) return { error: 'CPF obrigatório' };
+    if (!email) return { error: 'Email obrigatório' };
 
     const supabase = await createClient();
 
-    // 1. Lookup Email
-    const { data: userData, error: userError } = await supabase
-        .from('usuarios')
-        .select('email_institucional')
-        .eq('cpf', cpf)
-        .single();
-
-    if (userError || !userData?.email_institucional) {
-        return { error: 'CPF não encontrado.' };
-    }
-
-    const email = userData.email_institucional;
-
-    // 2. Send Recovery Email
+    // 2. Send Recovery Email directly (Supabase handles logic if email exists or not)
+    // We should probably check if it exists in our system first, but for now let's trust the email input
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/reset-password`,
+        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/callback?type=recovery`,
     });
 
     if (resetError) {
@@ -106,4 +94,19 @@ export async function logout() {
     const supabase = await createClient();
     await supabase.auth.signOut();
     redirect('/');
+}
+
+export async function updatePassword(password: string) {
+    const supabase = await createClient();
+
+    const { error } = await supabase.auth.updateUser({
+        password: password
+    });
+
+    if (error) {
+        console.error('Update Password Error:', error.message);
+        return { error: 'Erro ao atualizar a senha.' };
+    }
+
+    return { success: true };
 }

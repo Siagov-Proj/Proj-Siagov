@@ -183,25 +183,24 @@ export default function NovoSetorPage() {
                 </CardHeader>
                 <CardContent>
                     <div className="grid gap-6">
-                        {/* Código */}
-                        <div className="space-y-2">
-                            <div className="flex items-center gap-1">
-                                <Label htmlFor="codigo">Código<span className="text-red-500 ml-1">*</span></Label>
-                                <FieldTooltip content="Código gerado manualmente (4 dígitos)" />
+                        {/* Linha 1: Código e Vinculação Hierárquica */}
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-1">
+                                    <Label htmlFor="codigo">Código<span className="text-red-500 ml-1">*</span></Label>
+                                    <FieldTooltip content="Código gerado manualmente (4 dígitos)" />
+                                </div>
+                                <Input
+                                    id="codigo"
+                                    value={formData.codigo}
+                                    onChange={(e) => setFormData({ ...formData, codigo: e.target.value.replace(/\D/g, '').substring(0, 4) })}
+                                    maxLength={4}
+                                    placeholder="0000"
+                                    className={`font-mono ${errors.codigo ? 'border-red-500' : ''}`}
+                                />
+                                {errors.codigo && <p className="text-sm text-red-500">{errors.codigo}</p>}
                             </div>
-                            <Input
-                                id="codigo"
-                                value={formData.codigo}
-                                onChange={(e) => setFormData({ ...formData, codigo: e.target.value.replace(/\D/g, '').substring(0, 4) })}
-                                maxLength={4}
-                                placeholder="0000"
-                                className={`font-mono w-24 ${errors.codigo ? 'border-red-500' : ''}`}
-                            />
-                            {errors.codigo && <p className="text-sm text-red-500">{errors.codigo}</p>}
-                        </div>
 
-                        {/* Cascata: Instituição → Órgão → UG */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div className="space-y-2">
                                 <div className="flex items-center gap-1">
                                     <Label>Instituição<span className="text-red-500 ml-1">*</span></Label>

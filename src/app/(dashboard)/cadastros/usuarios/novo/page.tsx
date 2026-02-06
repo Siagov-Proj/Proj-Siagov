@@ -238,7 +238,11 @@ export default function NovoUsuarioPage() {
             });
 
             if (result.error) {
-                alert(result.error);
+                if (result.error.toLowerCase().includes('rate limit')) {
+                    alert('Limite de envio de emails excedido. Por favor, aguarde alguns minutos ou use outro email.');
+                } else {
+                    alert(result.error);
+                }
                 return;
             }
 
@@ -366,7 +370,7 @@ export default function NovoUsuarioPage() {
                                     value={formData.vinculo}
                                     onValueChange={(valor) => setFormData({ ...formData, vinculo: valor })}
                                 >
-                                    <SelectTrigger>
+                                    <SelectTrigger className="w-full">
                                         <SelectValue placeholder="Selecione" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -451,7 +455,7 @@ export default function NovoUsuarioPage() {
                                 value={formData.instituicaoId}
                                 onValueChange={handleInstituicaoChange}
                             >
-                                <SelectTrigger className={erros.instituicaoId ? 'border-red-500' : ''}>
+                                <SelectTrigger className={`w-full ${erros.instituicaoId ? 'border-red-500' : ''}`}>
                                     <SelectValue placeholder={loadingInstituicoes ? "Carregando..." : "Selecione"} />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -476,7 +480,7 @@ export default function NovoUsuarioPage() {
                                     onValueChange={handleOrgaoChange}
                                     disabled={!formData.instituicaoId}
                                 >
-                                    <SelectTrigger className={erros.orgaoId ? 'border-red-500' : ''}>
+                                    <SelectTrigger className={`w-full ${erros.orgaoId ? 'border-red-500' : ''}`}>
                                         <SelectValue placeholder={formData.instituicaoId ? "Selecione" : "Aguardando..."} />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -502,7 +506,7 @@ export default function NovoUsuarioPage() {
                                     onValueChange={handleUnidadeChange}
                                     disabled={!formData.orgaoId}
                                 >
-                                    <SelectTrigger className={erros.unidadeGestoraId ? 'border-red-500' : ''}>
+                                    <SelectTrigger className={`w-full ${erros.unidadeGestoraId ? 'border-red-500' : ''}`}>
                                         <SelectValue placeholder={formData.orgaoId ? "Selecione" : "Aguardando..."} />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -521,7 +525,7 @@ export default function NovoUsuarioPage() {
                                 value={formData.ugOrigem}
                                 onValueChange={(valor) => setFormData({ ...formData, ugOrigem: valor })}
                             >
-                                <SelectTrigger>
+                                <SelectTrigger className="w-full">
                                     <SelectValue placeholder="Selecione" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -545,7 +549,7 @@ export default function NovoUsuarioPage() {
                                     onValueChange={handleSetorChange}
                                     disabled={!formData.unidadeGestoraId}
                                 >
-                                    <SelectTrigger className={erros.setorId ? 'border-red-500' : ''}>
+                                    <SelectTrigger className={`w-full ${erros.setorId ? 'border-red-500' : ''}`}>
                                         <SelectValue placeholder={formData.unidadeGestoraId ? "Selecione" : "Aguardando..."} />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -571,7 +575,7 @@ export default function NovoUsuarioPage() {
                                     onValueChange={(valor) => setFormData({ ...formData, cargoId: valor })}
                                     disabled={!formData.setorId}
                                 >
-                                    <SelectTrigger>
+                                    <SelectTrigger className="w-full">
                                         <SelectValue placeholder={formData.setorId ? "Selecione" : "Aguardando..."} />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -589,7 +593,7 @@ export default function NovoUsuarioPage() {
                                 <FieldTooltip content="Define as permissões do usuário no sistema" />
                             </div>
                             <Select value={formData.perfilAcesso} onValueChange={(v) => setFormData({ ...formData, perfilAcesso: v })}>
-                                <SelectTrigger>
+                                <SelectTrigger className="w-full">
                                     <SelectValue placeholder="Selecione" />
                                 </SelectTrigger>
                                 <SelectContent>

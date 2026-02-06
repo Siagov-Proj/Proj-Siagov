@@ -633,7 +633,7 @@ export default function NovoCredorPage() {
                                             });
                                         }}
                                     >
-                                        <SelectTrigger>
+                                        <SelectTrigger className="w-full">
                                             <SelectValue placeholder="Selecione o banco" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -651,7 +651,7 @@ export default function NovoCredorPage() {
                                         value={formData.tipoConta}
                                         onValueChange={(v) => setFormData({ ...formData, tipoConta: v as ICredor['tipoContaBancaria'] })}
                                     >
-                                        <SelectTrigger>
+                                        <SelectTrigger className="w-full">
                                             <SelectValue placeholder="Selecione" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -682,7 +682,7 @@ export default function NovoCredorPage() {
                                                 }
                                             }}
                                         >
-                                            <SelectTrigger>
+                                            <SelectTrigger className="w-full">
                                                 <SelectValue placeholder="Selecione a agência" />
                                             </SelectTrigger>
                                             <SelectContent>
@@ -735,7 +735,7 @@ export default function NovoCredorPage() {
                                         value={formData.tipoChavePix}
                                         onValueChange={(v) => setFormData({ ...formData, tipoChavePix: v })}
                                     >
-                                        <SelectTrigger>
+                                        <SelectTrigger className="w-full">
                                             <SelectValue placeholder="Selecione..." />
                                         </SelectTrigger>
                                         <SelectContent>
