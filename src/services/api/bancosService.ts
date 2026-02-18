@@ -109,5 +109,21 @@ export const bancosService = {
             console.error('Erro ao excluir banco:', error);
             throw error;
         }
+    },
+
+    async contarAgencias(bancoId: string): Promise<number> {
+        const supabase = getSupabaseClient();
+        const { count, error } = await supabase
+            .from('agencias')
+            .select('*', { count: 'exact', head: true })
+            .eq('banco_id', bancoId)
+            .eq('excluido', false);
+
+        if (error) {
+            console.error('Erro ao contar agências do banco:', error);
+            throw error;
+        }
+
+        return count ?? 0;
     }
 };
