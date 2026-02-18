@@ -1,12 +1,14 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { AlertCircle } from 'lucide-react';
 
-export default function AuthErrorPage() {
+// Componente interno que usa useSearchParams — deve estar dentro de <Suspense>
+function AuthErrorContent() {
     const searchParams = useSearchParams();
     const error = searchParams.get('error');
 
@@ -43,5 +45,18 @@ export default function AuthErrorPage() {
                 </CardFooter>
             </Card>
         </div>
+    );
+}
+
+// Página principal envolve o conteúdo com Suspense (obrigatório para useSearchParams no Next.js 15)
+export default function AuthErrorPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+                <div className="text-muted-foreground">Carregando...</div>
+            </div>
+        }>
+            <AuthErrorContent />
+        </Suspense>
     );
 }
