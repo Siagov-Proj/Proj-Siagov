@@ -138,5 +138,21 @@ export const orgaosService = {
         }
 
         return data as IOrgaoDB[];
+    },
+
+    async contarUnidadesGestoras(orgaoId: string): Promise<number> {
+        const supabase = getSupabaseClient();
+        const { count, error } = await supabase
+            .from('unidades_gestoras')
+            .select('*', { count: 'exact', head: true })
+            .eq('orgao_id', orgaoId)
+            .eq('excluido', false);
+
+        if (error) {
+            console.error('Erro ao contar unidades gestoras do órgão:', error);
+            throw error;
+        }
+
+        return count ?? 0;
     }
 };

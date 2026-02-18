@@ -156,5 +156,21 @@ export const instituicoesService = {
         }
 
         return count || 0;
+    },
+
+    async contarOrgaos(instituicaoId: string): Promise<number> {
+        const supabase = getSupabaseClient();
+        const { count, error } = await supabase
+            .from('orgaos')
+            .select('*', { count: 'exact', head: true })
+            .eq('instituicao_id', instituicaoId)
+            .eq('excluido', false);
+
+        if (error) {
+            console.error('Erro ao contar órgãos da instituição:', error);
+            throw error;
+        }
+
+        return count ?? 0;
     }
 };
