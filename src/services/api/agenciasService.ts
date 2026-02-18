@@ -25,9 +25,15 @@ export interface IAgenciaDB {
     telefone?: string;
     email?: string;
     ativo: boolean;
+    // ... campos anteriores
     excluido: boolean;
     created_at: string;
     updated_at: string;
+    banco?: {
+        id: string;
+        codigo: string;
+        nome: string;
+    };
 }
 
 const TABLE_NAME = 'agencias';
@@ -37,7 +43,7 @@ export const agenciasService = {
         const supabase = getSupabaseClient();
         let query = supabase
             .from(TABLE_NAME)
-            .select('*')
+            .select('*, banco:bancos(id, codigo, nome)')
             .eq('excluido', false)
             .order('nome', { ascending: true });
 
