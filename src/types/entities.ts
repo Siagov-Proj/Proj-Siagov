@@ -305,13 +305,28 @@ export interface IAuthUser {
     nome: string;
     email: string;
     cpf: string;
-    instituicaoId: string;
-    orgaoId: string;
-    unidadeGestoraId: string;
-    setorId: string;
-    cargoId: string;
-    permissoes: string[];
+    // Legacy (mantido por compatibilidade)
+    instituicaoId?: string;
+    orgaoId?: string;
+    unidadeGestoraId?: string;
+    setorId?: string;
+    cargoId?: string;
+    permissoes?: string[];
     avatar?: string;
+    // Múltipla Lotação
+    lotacoes?: ILotacaoAuth[];
+}
+
+export interface ILotacaoAuth {
+    lotacaoId: string;
+    instituicaoId: string;
+    instituicaoNome: string;
+    instituicaoCodigo: string;
+    orgaoId?: string;
+    unidadeGestoraId?: string;
+    setorId?: string;
+    cargoId?: string;
+    perfilAcesso: string;
 }
 
 export interface IAuthState {

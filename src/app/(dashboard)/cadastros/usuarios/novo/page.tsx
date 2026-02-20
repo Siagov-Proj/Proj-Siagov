@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,7 +15,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ActionBar } from '@/components/ui/action-bar';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
-import { ArrowLeft, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2, Plus, Trash2 } from 'lucide-react';
 import { maskCpf } from '@/utils/masks';
 import { FIELD_LIMITS } from '@/utils/constants';
 import { createUserWithInvite } from '../actions';
@@ -29,7 +29,8 @@ import {
     IOrgaoDB,
     IUnidadeGestoraDB,
     ISetorDB,
-    ICargoDB
+    ICargoDB,
+    gerarProximoCodigo
 } from '@/services/api';
 
 const PERFIS_USUARIO = [
@@ -38,6 +39,45 @@ const PERFIS_USUARIO = [
     { value: 'operador', label: 'Operador' },
     { value: 'consulta', label: 'Consulta' },
 ];
+
+// Interface para cada lotação
+interface ILotacaoForm {
+    instituicaoId: string;
+    orgaoId: string;
+    unidadeGestoraId: string;
+    ugOrigem: string;
+    setorId: string;
+    cargoId: string;
+    perfilAcesso: string;
+    // Listas carregadas por cascata
+    orgaos: IOrgaoDB[];
+    unidades: IUnidadeGestoraDB[];
+    setores: ISetorDB[];
+    cargos: ICargoDB[];
+    // Loading states
+    loadingOrgaos: boolean;
+    loadingUnidades: boolean;
+    loadingSetores: boolean;
+    loadingCargos: boolean;
+}
+
+const lotacaoVazia: ILotacaoForm = {
+    instituicaoId: '',
+    orgaoId: '',
+    unidadeGestoraId: '',
+    ugOrigem: '',
+    setorId: '',
+    cargoId: '',
+    perfilAcesso: '',
+    orgaos: [],
+    unidades: [],
+    setores: [],
+    cargos: [],
+    loadingOrgaos: false,
+    loadingUnidades: false,
+    loadingSetores: false,
+    loadingCargos: false,
+};
 
 const formDataVazio = {
     codigo: '',
@@ -50,42 +90,40 @@ const formDataVazio = {
     emailPessoal: '',
     telefone01: '',
     telefoneWhatsApp: '',
-    instituicaoId: '',
-    orgaoId: '',
-    unidadeGestoraId: '',
-    ugOrigem: '',
-    setorId: '',
-    cargoId: '',
-    perfilAcesso: '',
 };
 
 export default function NovoUsuarioPage() {
     const router = useRouter();
     const [formData, setFormData] = useState(formDataVazio);
+    const [lotacoes, setLotacoes] = useState<ILotacaoForm[]>([{ ...lotacaoVazia }]);
     const [erros, setErros] = useState<Record<string, string>>({});
     const [saving, setSaving] = useState(false);
 
-    // Listas para selects
+    // Lista geral
     const [instituicoes, setInstituicoes] = useState<IInstituicaoDB[]>([]);
-    const [orgaos, setOrgaos] = useState<IOrgaoDB[]>([]);
-    const [unidades, setUnidades] = useState<IUnidadeGestoraDB[]>([]);
-    const [setores, setSetores] = useState<ISetorDB[]>([]);
-    const [cargos, setCargos] = useState<ICargoDB[]>([]);
     const [unidadesOrigem, setUnidadesOrigem] = useState<IUnidadeGestoraDB[]>([]);
-
-    // Loading states
     const [loadingInstituicoes, setLoadingInstituicoes] = useState(true);
-    const [loadingOrgaos, setLoadingOrgaos] = useState(false);
-    const [loadingUnidades, setLoadingUnidades] = useState(false);
-    const [loadingSetores, setLoadingSetores] = useState(false);
-    const [loadingCargos, setLoadingCargos] = useState(false);
+    const [loadingCodigo, setLoadingCodigo] = useState(true);
+
+    const carregarProximoCodigo = useCallback(async () => {
+        try {
+            setLoadingCodigo(true);
+            const codigo = await gerarProximoCodigo('usuarios', 6);
+            setFormData(prev => ({ ...prev, codigo }));
+        } catch (err) {
+            console.error('Erro ao gerar código:', err);
+            setFormData(prev => ({ ...prev, codigo: '000001' }));
+        } finally {
+            setLoadingCodigo(false);
+        }
+    }, []);
 
     useEffect(() => {
         const carregarDadosIniciais = async () => {
             try {
                 const [listaInstituicoes, listaUnidades] = await Promise.all([
                     instituicoesService.listar(),
-                    unidadesService.listar() // Para UG Origem
+                    unidadesService.listar()
                 ]);
                 setInstituicoes(listaInstituicoes);
                 setUnidadesOrigem(listaUnidades);
@@ -96,102 +134,89 @@ export default function NovoUsuarioPage() {
             }
         };
         carregarDadosIniciais();
-    }, []);
+        carregarProximoCodigo();
+    }, [carregarProximoCodigo]);
 
-    const handleInstituicaoChange = async (instituicaoId: string) => {
-        setFormData({
-            ...formData,
+    // --- Handlers de cascata por lotação ---
+    const updateLotacao = (index: number, updates: Partial<ILotacaoForm>) => {
+        setLotacoes(prev => prev.map((lot, i) => i === index ? { ...lot, ...updates } : lot));
+    };
+
+    const handleInstituicaoChange = async (index: number, instituicaoId: string) => {
+        updateLotacao(index, {
             instituicaoId,
-            orgaoId: '',
-            unidadeGestoraId: '',
-            setorId: '',
-            cargoId: ''
+            orgaoId: '', unidadeGestoraId: '', setorId: '', cargoId: '',
+            orgaos: [], unidades: [], setores: [], cargos: [],
         });
-        setOrgaos([]);
-        setUnidades([]);
-        setSetores([]);
-        setCargos([]);
 
         if (instituicaoId) {
+            updateLotacao(index, { loadingOrgaos: true });
             try {
-                setLoadingOrgaos(true);
                 const data = await orgaosService.listarPorInstituicao(instituicaoId);
-                setOrgaos(data);
-            } catch (err) {
-                console.error('Erro ao carregar órgãos:', err);
-            } finally {
-                setLoadingOrgaos(false);
+                updateLotacao(index, { orgaos: data, loadingOrgaos: false });
+            } catch {
+                updateLotacao(index, { loadingOrgaos: false });
             }
         }
     };
 
-    const handleOrgaoChange = async (orgaoId: string) => {
-        setFormData({
-            ...formData,
+    const handleOrgaoChange = async (index: number, orgaoId: string) => {
+        updateLotacao(index, {
             orgaoId,
-            unidadeGestoraId: '',
-            setorId: '',
-            cargoId: ''
+            unidadeGestoraId: '', setorId: '', cargoId: '',
+            unidades: [], setores: [], cargos: [],
         });
-        setUnidades([]);
-        setSetores([]);
-        setCargos([]);
 
         if (orgaoId) {
+            updateLotacao(index, { loadingUnidades: true });
             try {
-                setLoadingUnidades(true);
                 const data = await unidadesService.listarPorOrgao(orgaoId);
-                setUnidades(data);
-            } catch (err) {
-                console.error('Erro ao carregar unidades:', err);
-            } finally {
-                setLoadingUnidades(false);
+                updateLotacao(index, { unidades: data, loadingUnidades: false });
+            } catch {
+                updateLotacao(index, { loadingUnidades: false });
             }
         }
     };
 
-    const handleUnidadeChange = async (unidadeGestoraId: string) => {
-        setFormData({
-            ...formData,
+    const handleUnidadeChange = async (index: number, unidadeGestoraId: string) => {
+        updateLotacao(index, {
             unidadeGestoraId,
-            setorId: '',
-            cargoId: ''
+            setorId: '', cargoId: '',
+            setores: [], cargos: [],
         });
-        setSetores([]);
-        setCargos([]);
 
         if (unidadeGestoraId) {
+            updateLotacao(index, { loadingSetores: true });
             try {
-                setLoadingSetores(true);
                 const data = await setoresService.listarPorUnidadeGestora(unidadeGestoraId);
-                setSetores(data);
-            } catch (err) {
-                console.error('Erro ao carregar setores:', err);
-            } finally {
-                setLoadingSetores(false);
+                updateLotacao(index, { setores: data, loadingSetores: false });
+            } catch {
+                updateLotacao(index, { loadingSetores: false });
             }
         }
     };
 
-    const handleSetorChange = async (setorId: string) => {
-        setFormData({
-            ...formData,
-            setorId,
-            cargoId: ''
-        });
-        setCargos([]);
+    const handleSetorChange = async (index: number, setorId: string) => {
+        updateLotacao(index, { setorId, cargoId: '', cargos: [] });
 
         if (setorId) {
+            updateLotacao(index, { loadingCargos: true });
             try {
-                setLoadingCargos(true);
                 const data = await cargosService.listarPorSetor(setorId);
-                setCargos(data);
-            } catch (err) {
-                console.error('Erro ao carregar cargos:', err);
-            } finally {
-                setLoadingCargos(false);
+                updateLotacao(index, { cargos: data, loadingCargos: false });
+            } catch {
+                updateLotacao(index, { loadingCargos: false });
             }
         }
+    };
+
+    const adicionarLotacao = () => {
+        setLotacoes(prev => [...prev, { ...lotacaoVazia }]);
+    };
+
+    const removerLotacao = (index: number) => {
+        if (lotacoes.length <= 1) return; // Mínimo 1
+        setLotacoes(prev => prev.filter((_, i) => i !== index));
     };
 
     const validar = (): boolean => {
@@ -202,10 +227,13 @@ export default function NovoUsuarioPage() {
         if (!formData.cpf) novosErros.cpf = 'CPF é obrigatório';
         if (formData.cpf && formData.cpf.length < 14) novosErros.cpf = 'CPF incompleto';
         if (!formData.emailInstitucional) novosErros.emailInstitucional = 'E-mail Institucional é obrigatório';
-        if (!formData.instituicaoId) novosErros.instituicaoId = 'Instituição é obrigatória';
-        if (!formData.orgaoId) novosErros.orgaoId = 'Órgão é obrigatório';
-        if (!formData.unidadeGestoraId) novosErros.unidadeGestoraId = 'Unidade Gestora é obrigatória';
-        if (!formData.setorId) novosErros.setorId = 'Setor é obrigatório';
+
+        lotacoes.forEach((lot, i) => {
+            if (!lot.instituicaoId) novosErros[`lotacao_${i}_instituicaoId`] = 'Instituição é obrigatória';
+            if (!lot.orgaoId) novosErros[`lotacao_${i}_orgaoId`] = 'Órgão é obrigatório';
+            if (!lot.unidadeGestoraId) novosErros[`lotacao_${i}_unidadeGestoraId`] = 'UG é obrigatória';
+            if (!lot.setorId) novosErros[`lotacao_${i}_setorId`] = 'Setor é obrigatório';
+        });
 
         setErros(novosErros);
         return Object.keys(novosErros).length === 0;
@@ -227,14 +255,16 @@ export default function NovoUsuarioPage() {
                 emailPessoal: formData.emailPessoal,
                 telefone01: formData.telefone01,
                 telefoneWhatsApp: formData.telefoneWhatsApp,
-                instituicaoId: formData.instituicaoId,
-                orgaoId: formData.orgaoId,
-                unidadeGestoraId: formData.unidadeGestoraId,
-                ugOrigemId: formData.ugOrigem,
-                setorId: formData.setorId,
-                cargoId: formData.cargoId || undefined,
-                perfilAcesso: formData.perfilAcesso || 'consulta',
                 ativo: true,
+                lotacoes: lotacoes.map(lot => ({
+                    instituicaoId: lot.instituicaoId,
+                    orgaoId: lot.orgaoId,
+                    unidadeGestoraId: lot.unidadeGestoraId,
+                    setorId: lot.setorId,
+                    cargoId: lot.cargoId || undefined,
+                    ugOrigemId: lot.ugOrigem || undefined,
+                    perfilAcesso: lot.perfilAcesso || 'consulta',
+                })),
             });
 
             if (result.error) {
@@ -261,14 +291,200 @@ export default function NovoUsuarioPage() {
     };
 
     const handleLimpar = () => {
-        setFormData(formDataVazio);
+        setFormData({ ...formDataVazio, codigo: formData.codigo });
+        setLotacoes([{ ...lotacaoVazia }]);
         setErros({});
-        // Limpar cascatas
-        setOrgaos([]);
-        setUnidades([]);
-        setSetores([]);
-        setCargos([]);
     };
+
+    // Render de um bloco de lotação
+    const renderLotacao = (lot: ILotacaoForm, index: number) => (
+        <div key={index} className="relative border rounded-lg p-4 space-y-4 bg-gray-50/50 dark:bg-gray-900/30">
+            {/* Header com número e botão remover */}
+            <div className="flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-muted-foreground">
+                    Lotação {index + 1}
+                </h4>
+                {lotacoes.length > 1 && (
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20 h-8"
+                        onClick={() => removerLotacao(index)}
+                    >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Remover
+                    </Button>
+                )}
+            </div>
+
+            {/* Linha 1: Instituição e Órgão */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label>Instituição<span className="text-red-500 ml-1">*</span></Label>
+                    <Select
+                        value={lot.instituicaoId}
+                        onValueChange={(val) => handleInstituicaoChange(index, val)}
+                    >
+                        <SelectTrigger className={`w-full ${erros[`lotacao_${index}_instituicaoId`] ? 'border-red-500' : ''}`}>
+                            <SelectValue placeholder={loadingInstituicoes ? "Carregando..." : "Selecione"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {instituicoes.map((inst) => (
+                                <SelectItem key={inst.id} value={inst.id}>{inst.codigo} - {inst.nome}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                    {erros[`lotacao_${index}_instituicaoId`] && <p className="text-sm text-red-500">{erros[`lotacao_${index}_instituicaoId`]}</p>}
+                </div>
+
+                <div className="space-y-2">
+                    <Label>Órgão<span className="text-red-500 ml-1">*</span></Label>
+                    {lot.loadingOrgaos ? (
+                        <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted">
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                            <span className="text-sm text-muted-foreground">Carregando...</span>
+                        </div>
+                    ) : (
+                        <Select
+                            value={lot.orgaoId}
+                            onValueChange={(val) => handleOrgaoChange(index, val)}
+                            disabled={!lot.instituicaoId}
+                        >
+                            <SelectTrigger className={`w-full ${erros[`lotacao_${index}_orgaoId`] ? 'border-red-500' : ''}`}>
+                                <SelectValue placeholder={lot.instituicaoId ? "Selecione" : "Aguardando..."} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {lot.orgaos.map((org) => (
+                                    <SelectItem key={org.id} value={org.id}>{org.codigo} - {org.nome}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
+                    {erros[`lotacao_${index}_orgaoId`] && <p className="text-sm text-red-500">{erros[`lotacao_${index}_orgaoId`]}</p>}
+                </div>
+            </div>
+
+            {/* Linha 2: UG, UG Origem */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label>Unidade Gestora<span className="text-red-500 ml-1">*</span></Label>
+                    {lot.loadingUnidades ? (
+                        <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted">
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                            <span className="text-sm text-muted-foreground">Carregando...</span>
+                        </div>
+                    ) : (
+                        <Select
+                            value={lot.unidadeGestoraId}
+                            onValueChange={(val) => handleUnidadeChange(index, val)}
+                            disabled={!lot.orgaoId}
+                        >
+                            <SelectTrigger className={`w-full ${erros[`lotacao_${index}_unidadeGestoraId`] ? 'border-red-500' : ''}`}>
+                                <SelectValue placeholder={lot.orgaoId ? "Selecione" : "Aguardando..."} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {lot.unidades.map((ug) => (
+                                    <SelectItem key={ug.id} value={ug.id}>{ug.codigo} - {ug.nome}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
+                    {erros[`lotacao_${index}_unidadeGestoraId`] && <p className="text-sm text-red-500">{erros[`lotacao_${index}_unidadeGestoraId`]}</p>}
+                </div>
+
+                <div className="space-y-2">
+                    <Label>UG Origem</Label>
+                    <Select
+                        value={lot.ugOrigem}
+                        onValueChange={(val) => updateLotacao(index, { ugOrigem: val })}
+                    >
+                        <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {unidadesOrigem.map((ug) => (
+                                <SelectItem key={ug.id} value={ug.id}>{ug.codigo} - {ug.nome}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
+
+            {/* Linha 3: Setor, Cargo, Perfil */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                    <Label>Setor<span className="text-red-500 ml-1">*</span></Label>
+                    {lot.loadingSetores ? (
+                        <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted">
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                            <span className="text-sm text-muted-foreground">Carregando...</span>
+                        </div>
+                    ) : (
+                        <Select
+                            value={lot.setorId}
+                            onValueChange={(val) => handleSetorChange(index, val)}
+                            disabled={!lot.unidadeGestoraId}
+                        >
+                            <SelectTrigger className={`w-full ${erros[`lotacao_${index}_setorId`] ? 'border-red-500' : ''}`}>
+                                <SelectValue placeholder={lot.unidadeGestoraId ? "Selecione" : "Aguardando..."} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {lot.setores.map((setor) => (
+                                    <SelectItem key={setor.id} value={setor.id}>{setor.codigo} - {setor.nome}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
+                    {erros[`lotacao_${index}_setorId`] && <p className="text-sm text-red-500">{erros[`lotacao_${index}_setorId`]}</p>}
+                </div>
+
+                <div className="space-y-2">
+                    <Label>Cargo</Label>
+                    {lot.loadingCargos ? (
+                        <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted">
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                            <span className="text-sm text-muted-foreground">Carregando...</span>
+                        </div>
+                    ) : (
+                        <Select
+                            value={lot.cargoId}
+                            onValueChange={(val) => updateLotacao(index, { cargoId: val })}
+                            disabled={!lot.setorId}
+                        >
+                            <SelectTrigger className="w-full">
+                                <SelectValue placeholder={lot.setorId ? "Selecione" : "Aguardando..."} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {lot.cargos.map((cargo) => (
+                                    <SelectItem key={cargo.id} value={cargo.id}>{cargo.nome}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
+                </div>
+
+                <div className="space-y-2">
+                    <div className="flex items-center gap-1">
+                        <Label>Perfil de Acesso</Label>
+                        <FieldTooltip content="Define as permissões do usuário nesta lotação" />
+                    </div>
+                    <Select
+                        value={lot.perfilAcesso}
+                        onValueChange={(val) => updateLotacao(index, { perfilAcesso: val })}
+                    >
+                        <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {PERFIS_USUARIO.map((perfil) => (
+                                <SelectItem key={perfil.value} value={perfil.value}>{perfil.label}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
+        </div>
+    );
 
     return (
         <div className="space-y-6">
@@ -293,14 +509,18 @@ export default function NovoUsuarioPage() {
                     <div className="grid gap-4">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label htmlFor="codigo">Código<span className="text-red-500 ml-1">*</span></Label>
+                                <div className="flex items-center gap-1">
+                                    <Label htmlFor="codigo">Código<span className="text-red-500 ml-1">*</span></Label>
+                                    <FieldTooltip content="Código de 6 dígitos gerado automaticamente. Pode ser editado." />
+                                </div>
                                 <Input
                                     id="codigo"
                                     value={formData.codigo}
-                                    onChange={(e) => setFormData({ ...formData, codigo: e.target.value.substring(0, 10) })}
-                                    maxLength={10}
-                                    placeholder="Código"
+                                    onChange={(e) => setFormData({ ...formData, codigo: e.target.value.replace(/\D/g, '').substring(0, 6) })}
+                                    maxLength={6}
+                                    placeholder={loadingCodigo ? 'Gerando...' : '000001'}
                                     className={`font-mono w-full ${erros.codigo ? 'border-red-500' : ''}`}
+                                    disabled={loadingCodigo}
                                 />
                                 {erros.codigo && <p className="text-sm text-red-500">{erros.codigo}</p>}
                             </div>
@@ -329,7 +549,7 @@ export default function NovoUsuarioPage() {
                                     value={formData.cpf}
                                     onChange={(e) => {
                                         const novoCpf = maskCpf(e.target.value);
-                                        const nomeCredorMock = novoCpf.length === 14 ? formData.nome : ''; // Usar o nome digitado como sugestão
+                                        const nomeCredorMock = novoCpf.length === 14 ? formData.nome : '';
                                         setFormData({
                                             ...formData,
                                             cpf: novoCpf,
@@ -442,167 +662,28 @@ export default function NovoUsuarioPage() {
                 </CardContent>
             </Card>
 
+            {/* Card de Lotações */}
             <Card>
                 <CardHeader>
-                    <CardTitle>Lotação</CardTitle>
-                    <CardDescription>Hierarquia organizacional do usuário</CardDescription>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <CardTitle>Lotação</CardTitle>
+                            <CardDescription>Hierarquia organizacional do usuário. É possível vincular a múltiplas instituições.</CardDescription>
+                        </div>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={adicionarLotacao}
+                            className="flex items-center gap-1"
+                        >
+                            <Plus className="h-4 w-4" />
+                            Adicionar Lotação
+                        </Button>
+                    </div>
                 </CardHeader>
                 <CardContent>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <Label>Instituição<span className="text-red-500 ml-1">*</span></Label>
-                            <Select
-                                value={formData.instituicaoId}
-                                onValueChange={handleInstituicaoChange}
-                            >
-                                <SelectTrigger className={`w-full ${erros.instituicaoId ? 'border-red-500' : ''}`}>
-                                    <SelectValue placeholder={loadingInstituicoes ? "Carregando..." : "Selecione"} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {instituicoes.map((inst) => (
-                                        <SelectItem key={inst.id} value={inst.id}>{inst.codigo} - {inst.nome}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            {erros.instituicaoId && <p className="text-sm text-red-500">{erros.instituicaoId}</p>}
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>Órgão<span className="text-red-500 ml-1">*</span></Label>
-                            {loadingOrgaos ? (
-                                <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted">
-                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                                    <span className="text-sm text-muted-foreground">Carregando...</span>
-                                </div>
-                            ) : (
-                                <Select
-                                    value={formData.orgaoId}
-                                    onValueChange={handleOrgaoChange}
-                                    disabled={!formData.instituicaoId}
-                                >
-                                    <SelectTrigger className={`w-full ${erros.orgaoId ? 'border-red-500' : ''}`}>
-                                        <SelectValue placeholder={formData.instituicaoId ? "Selecione" : "Aguardando..."} />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {orgaos.map((org) => (
-                                            <SelectItem key={org.id} value={org.id}>{org.codigo} - {org.nome}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            )}
-                            {erros.orgaoId && <p className="text-sm text-red-500">{erros.orgaoId}</p>}
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>Unidade Gestora<span className="text-red-500 ml-1">*</span></Label>
-                            {loadingUnidades ? (
-                                <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted">
-                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                                    <span className="text-sm text-muted-foreground">Carregando...</span>
-                                </div>
-                            ) : (
-                                <Select
-                                    value={formData.unidadeGestoraId}
-                                    onValueChange={handleUnidadeChange}
-                                    disabled={!formData.orgaoId}
-                                >
-                                    <SelectTrigger className={`w-full ${erros.unidadeGestoraId ? 'border-red-500' : ''}`}>
-                                        <SelectValue placeholder={formData.orgaoId ? "Selecione" : "Aguardando..."} />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {unidades.map((ug) => (
-                                            <SelectItem key={ug.id} value={ug.id}>{ug.codigo} - {ug.nome}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            )}
-                            {erros.unidadeGestoraId && <p className="text-sm text-red-500">{erros.unidadeGestoraId}</p>}
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>UG Origem</Label>
-                            <Select
-                                value={formData.ugOrigem}
-                                onValueChange={(valor) => setFormData({ ...formData, ugOrigem: valor })}
-                            >
-                                <SelectTrigger className="w-full">
-                                    <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {unidadesOrigem.map((ug) => (
-                                        <SelectItem key={ug.id} value={ug.id}>{ug.codigo} - {ug.nome}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>Setor<span className="text-red-500 ml-1">*</span></Label>
-                            {loadingSetores ? (
-                                <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted">
-                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                                    <span className="text-sm text-muted-foreground">Carregando...</span>
-                                </div>
-                            ) : (
-                                <Select
-                                    value={formData.setorId}
-                                    onValueChange={handleSetorChange}
-                                    disabled={!formData.unidadeGestoraId}
-                                >
-                                    <SelectTrigger className={`w-full ${erros.setorId ? 'border-red-500' : ''}`}>
-                                        <SelectValue placeholder={formData.unidadeGestoraId ? "Selecione" : "Aguardando..."} />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {setores.map((setor) => (
-                                            <SelectItem key={setor.id} value={setor.id}>{setor.codigo} - {setor.nome}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            )}
-                            {erros.setorId && <p className="text-sm text-red-500">{erros.setorId}</p>}
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>Cargo</Label>
-                            {loadingCargos ? (
-                                <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted">
-                                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                                    <span className="text-sm text-muted-foreground">Carregando...</span>
-                                </div>
-                            ) : (
-                                <Select
-                                    value={formData.cargoId}
-                                    onValueChange={(valor) => setFormData({ ...formData, cargoId: valor })}
-                                    disabled={!formData.setorId}
-                                >
-                                    <SelectTrigger className="w-full">
-                                        <SelectValue placeholder={formData.setorId ? "Selecione" : "Aguardando..."} />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {cargos.map((cargo) => (
-                                            <SelectItem key={cargo.id} value={cargo.id}>{cargo.nome}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            )}
-                        </div>
-
-                        <div className="space-y-2">
-                            <div className="flex items-center gap-1">
-                                <Label>Perfil de Acesso</Label>
-                                <FieldTooltip content="Define as permissões do usuário no sistema" />
-                            </div>
-                            <Select value={formData.perfilAcesso} onValueChange={(v) => setFormData({ ...formData, perfilAcesso: v })}>
-                                <SelectTrigger className="w-full">
-                                    <SelectValue placeholder="Selecione" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {PERFIS_USUARIO.map((perfil) => (
-                                        <SelectItem key={perfil.value} value={perfil.value}>{perfil.label}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
+                    <div className="space-y-6">
+                        {lotacoes.map((lot, index) => renderLotacao(lot, index))}
                     </div>
                 </CardContent>
             </Card>

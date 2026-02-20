@@ -39,11 +39,23 @@ export default function LoginPage() {
 
             if (result?.success && result.user) {
                 // Sincroniza o estado do Zustand com os dados retornados
-                // O token 'authenticated' é apenas um placeholder pois o Supabase usa cookies
                 syncStore(result.user, 'authenticated');
 
-                // Redireciona via router do client
-                router.push('/dashboard');
+                // Verificar quantidade de lotações
+                const lotacoes = result.user.lotacoes || [];
+
+                if (lotacoes.length === 1) {
+                    // Apenas 1 lotação: seleciona automaticamente e vai ao dashboard
+                    const { setLotacaoAtiva } = useAuthStore.getState();
+                    setLotacaoAtiva(lotacoes[0]);
+                    router.push('/dashboard');
+                } else if (lotacoes.length > 1) {
+                    // Múltiplas lotações: redireciona para seleção
+                    router.push('/selecionar-instituicao');
+                } else {
+                    // Nenhuma lotação: vai ao dashboard (legacy)
+                    router.push('/dashboard');
+                }
                 return;
             }
 

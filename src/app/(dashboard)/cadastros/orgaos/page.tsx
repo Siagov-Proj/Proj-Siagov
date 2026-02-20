@@ -17,6 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Plus, Search, Pencil, Trash2, Building, ArrowLeft, Loader2 } from 'lucide-react';
 import { orgaosService, IOrgaoDB } from '@/services/api';
+import { AuditHistoryDialog } from '@/components/ui/audit-history-dialog';
 
 export default function OrgaosPage() {
     const router = useRouter();
@@ -157,6 +158,13 @@ export default function OrgaosPage() {
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="flex items-center justify-center gap-1">
+                                                        <AuditHistoryDialog
+                                                            tableName="orgaos"
+                                                            recordId={orgao.id}
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            buttonText=""
+                                                        />
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"

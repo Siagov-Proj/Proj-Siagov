@@ -18,7 +18,7 @@ import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { maskCodigoComZeros, maskTelefone } from '@/utils/masks';
 import { FIELD_LIMITS } from '@/utils/constants';
 import { ArrowLeft, Loader2 } from 'lucide-react';
-import { setoresService, instituicoesService, orgaosService, unidadesService, IInstituicaoDB, IOrgaoDB, IUnidadeGestoraDB } from '@/services/api';
+import { setoresService, instituicoesService, orgaosService, unidadesService, IInstituicaoDB, IOrgaoDB, IUnidadeGestoraDB, gerarProximoCodigo } from '@/services/api';
 
 const emptyFormData = {
     codigo: '',
@@ -49,6 +49,7 @@ export default function NovoSetorPage() {
     const [loadingInstituicoes, setLoadingInstituicoes] = useState(true);
     const [loadingOrgaos, setLoadingOrgaos] = useState(false);
     const [loadingUnidades, setLoadingUnidades] = useState(false);
+    const [loadingCodigo, setLoadingCodigo] = useState(false);
 
     // Carregar instituições ao iniciar
     useEffect(() => {
@@ -109,6 +110,24 @@ export default function NovoSetorPage() {
         };
         carregarUnidades();
     }, [formData.orgaoId]);
+
+    // Gerar código quando a Unidade Gestora mudar
+    useEffect(() => {
+        const gerarCodigo = async () => {
+            if (!formData.unidadeGestoraId) return;
+            try {
+                setLoadingCodigo(true);
+                const codigo = await gerarProximoCodigo('setores', 4, 'unidade_gestora_id', formData.unidadeGestoraId);
+                setFormData(prev => ({ ...prev, codigo }));
+            } catch (err) {
+                console.error('Erro ao gerar código:', err);
+                setFormData(prev => ({ ...prev, codigo: '0001' }));
+            } finally {
+                setLoadingCodigo(false);
+            }
+        };
+        gerarCodigo();
+    }, [formData.unidadeGestoraId]);
 
     const validate = (): boolean => {
         const newErrors: Record<string, string> = {};
@@ -183,24 +202,8 @@ export default function NovoSetorPage() {
                 </CardHeader>
                 <CardContent>
                     <div className="grid gap-6">
-                        {/* Linha 1: Código e Vinculação Hierárquica */}
+                        {/* Linha 1: Vinculação Hierárquica e Código */}
                         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                            <div className="space-y-2">
-                                <div className="flex items-center gap-1">
-                                    <Label htmlFor="codigo">Código<span className="text-red-500 ml-1">*</span></Label>
-                                    <FieldTooltip content="Código gerado manualmente (4 dígitos)" />
-                                </div>
-                                <Input
-                                    id="codigo"
-                                    value={formData.codigo}
-                                    onChange={(e) => setFormData({ ...formData, codigo: e.target.value.replace(/\D/g, '').substring(0, 4) })}
-                                    maxLength={4}
-                                    placeholder="0000"
-                                    className={`font-mono ${errors.codigo ? 'border-red-500' : ''}`}
-                                />
-                                {errors.codigo && <p className="text-sm text-red-500">{errors.codigo}</p>}
-                            </div>
-
                             <div className="space-y-2">
                                 <div className="flex items-center gap-1">
                                     <Label>Instituição<span className="text-red-500 ml-1">*</span></Label>
@@ -289,6 +292,23 @@ export default function NovoSetorPage() {
                                     </Select>
                                 )}
                                 {errors.unidadeGestoraId && <p className="text-sm text-red-500">{errors.unidadeGestoraId}</p>}
+                            </div>
+
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-1">
+                                    <Label htmlFor="codigo">Código<span className="text-red-500 ml-1">*</span></Label>
+                                    <FieldTooltip content="Código sugerido automaticamente ao selecionar a UG. Pode ser editado." />
+                                </div>
+                                <Input
+                                    id="codigo"
+                                    value={formData.codigo}
+                                    onChange={(e) => setFormData({ ...formData, codigo: e.target.value.replace(/\D/g, '').substring(0, 4) })}
+                                    maxLength={4}
+                                    placeholder={loadingCodigo ? 'Gerando...' : '0000'}
+                                    className={`font-mono ${errors.codigo ? 'border-red-500' : ''}`}
+                                    disabled={loadingCodigo}
+                                />
+                                {errors.codigo && <p className="text-sm text-red-500">{errors.codigo}</p>}
                             </div>
                         </div>
 

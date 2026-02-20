@@ -101,7 +101,8 @@ export const unidadesService = {
 
     async atualizar(id: string, unidade: Partial<IUnidadeGestoraDB>): Promise<IUnidadeGestoraDB> {
         const supabase = getSupabaseClient();
-        const { id: _, created_at, updated_at, excluido, ...dadosAtualizacao } = unidade;
+        // Remove campos que não devem ser atualizados diretamente
+        const { id: _, created_at, updated_at, ...dadosAtualizacao } = unidade;
 
         const { data, error } = await supabase
             .from(TABLE_NAME)
@@ -111,8 +112,8 @@ export const unidadesService = {
             .single();
 
         if (error) {
-            console.error('Erro ao atualizar unidade gestora:', error);
-            throw error;
+            console.error('Erro ao atualizar unidade gestora:', JSON.stringify(error));
+            throw new Error(error.message || 'Erro desconhecido ao atualizar');
         }
 
         return data as IUnidadeGestoraDB;

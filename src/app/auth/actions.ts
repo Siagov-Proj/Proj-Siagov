@@ -12,18 +12,12 @@ export async function loginWithCpf(formData: FormData) {
         return { error: 'CPF e senha são obrigatórios' };
     }
 
-    // Attempt to handle both unmasked (frontend) and masked (backend seed) formats.
-    // The previous error was due to frontend sending "12345678900" 
-    // but database having "123.456.789-00".
-
     const cleanNumbers = rawCpf.replace(/\D/g, '');
     const cpfMasked = cleanNumbers.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
 
     const supabase = await createClient();
 
     // 1. Lookup Email and User Data by CPF
-    // Use .maybeSingle() to gracefully handle "User Not Found" (PGRST116)
-    // We try querying with the MASKED CPF first, as that is the backend standard.
     const { data: userData, error: userError } = await supabase
         .from('usuarios')
         .select(`
@@ -62,10 +56,47 @@ export async function loginWithCpf(formData: FormData) {
         return { error: 'Senha incorreta.' };
     }
 
-    // Return success and user data to sync client store
+    // 3. Buscar lotações do usuário
+    const { data: lotacoesData, error: lotacoesError } = await supabase
+        .from('usuario_lotacoes')
+        .select(`
+            id,
+            orgao_id,
+            unidade_gestora_id,
+            setor_id,
+            cargo_id,
+            perfil_acesso,
+            instituicoes (
+                id,
+                codigo,
+                nome,
+                nome_abreviado
+            )
+        `)
+        .eq('usuario_id', userData.id)
+        .eq('excluido', false)
+        .eq('ativo', true);
+
+    const lotacoes = (lotacoesData || []).map((item: any) => ({
+        lotacaoId: item.id,
+        instituicaoId: item.instituicoes?.id,
+        instituicaoNome: item.instituicoes?.nome,
+        instituicaoCodigo: item.instituicoes?.codigo,
+        orgaoId: item.orgao_id,
+        unidadeGestoraId: item.unidade_gestora_id,
+        setorId: item.setor_id,
+        cargoId: item.cargo_id,
+        perfilAcesso: item.perfil_acesso,
+    }));
+
+    // Return success with lotações
     return {
         success: true,
-        user: userData
+        user: {
+            ...userData,
+            lotacoes,
+        },
+        lotacoesCount: lotacoes.length,
     };
 }
 
@@ -76,8 +107,6 @@ export async function recoverPassword(formData: FormData) {
 
     const supabase = await createClient();
 
-    // 2. Send Recovery Email directly (Supabase handles logic if email exists or not)
-    // We should probably check if it exists in our system first, but for now let's trust the email input
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/callback?type=recovery`,
     });

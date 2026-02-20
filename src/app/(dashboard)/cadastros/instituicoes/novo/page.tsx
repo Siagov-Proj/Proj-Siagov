@@ -18,7 +18,7 @@ import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { maskCnpj, maskCep } from '@/utils/masks';
 import { ESTADOS_BRASIL, FIELD_LIMITS } from '@/utils/constants';
 import { ArrowLeft, Loader2 } from 'lucide-react';
-import { instituicoesService, esferasService, IEsferaDB } from '@/services/api';
+import { instituicoesService, esferasService, IEsferaDB, gerarProximoCodigo } from '@/services/api';
 
 const emptyFormData = {
     codigo: '',
@@ -57,10 +57,9 @@ export default function NovaInstituicaoPage() {
         }
     }, []);
 
-    const gerarProximoCodigo = useCallback(async () => {
+    const carregarProximoCodigo = useCallback(async () => {
         try {
-            const count = await instituicoesService.contar();
-            const codigo = String(count + 1).padStart(3, '0');
+            const codigo = await gerarProximoCodigo('instituicoes', 3);
             setFormData(prev => ({ ...prev, codigo }));
         } catch (err) {
             console.error('Erro ao gerar código:', err);
@@ -70,8 +69,8 @@ export default function NovaInstituicaoPage() {
 
     useEffect(() => {
         carregarEsferas();
-        gerarProximoCodigo();
-    }, [carregarEsferas, gerarProximoCodigo]);
+        carregarProximoCodigo();
+    }, [carregarEsferas, carregarProximoCodigo]);
 
     const validate = (): boolean => {
         const newErrors: Record<string, string> = {};
@@ -149,13 +148,15 @@ export default function NovaInstituicaoPage() {
                             <div className="space-y-2">
                                 <div className="flex items-center gap-1">
                                     <Label htmlFor="codigo">Código</Label>
-                                    <FieldTooltip content="Código sequencial gerado automaticamente" />
+                                    <FieldTooltip content="Código sequencial sugerido automaticamente. Pode ser editado." />
                                 </div>
                                 <Input
                                     id="codigo"
                                     value={formData.codigo}
-                                    readOnly
-                                    className="bg-muted font-mono"
+                                    onChange={(e) => setFormData({ ...formData, codigo: e.target.value.replace(/\D/g, '').substring(0, 3) })}
+                                    maxLength={3}
+                                    placeholder="001"
+                                    className="font-mono"
                                 />
                             </div>
 

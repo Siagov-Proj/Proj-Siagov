@@ -18,16 +18,20 @@ import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { maskCodigoComZeros } from '@/utils/masks';
 import { FIELD_LIMITS } from '@/utils/constants';
 import { ArrowLeft, Loader2 } from 'lucide-react';
+import { TransferList, TransferItem } from '@/components/ui/transfer-list';
 import {
     cargosService,
     instituicoesService,
     orgaosService,
     unidadesService,
     setoresService,
+    permissoesService,
     IInstituicaoDB,
     IOrgaoDB,
     IUnidadeGestoraDB,
-    ISetorDB
+    ISetorDB,
+    IPermissaoDB,
+    gerarProximoCodigo
 } from '@/services/api';
 
 const NIVEIS_CARGO = [
@@ -65,6 +69,12 @@ export default function NovoCargoPage() {
     const [loadingOrgaos, setLoadingOrgaos] = useState(false);
     const [loadingUnidades, setLoadingUnidades] = useState(false);
     const [loadingSetores, setLoadingSetores] = useState(false);
+    const [loadingCodigo, setLoadingCodigo] = useState(true);
+
+    // Permissões
+    const [todasPermissoes, setTodasPermissoes] = useState<IPermissaoDB[]>([]);
+    const [permissoesAtribuidas, setPermissoesAtribuidas] = useState<string[]>([]);
+    const [loadingPermissoes, setLoadingPermissoes] = useState(true);
 
     useEffect(() => {
         carregarInstituicoes();
@@ -73,12 +83,18 @@ export default function NovoCargoPage() {
     const carregarInstituicoes = async () => {
         try {
             setLoadingInstituicoes(true);
-            const data = await instituicoesService.listar();
-            setInstituicoes(data);
+            setLoadingPermissoes(true);
+            const [listaInstituicoes, listaPermissoes] = await Promise.all([
+                instituicoesService.listar(),
+                permissoesService.listar(),
+            ]);
+            setInstituicoes(listaInstituicoes);
+            setTodasPermissoes(listaPermissoes);
         } catch (error) {
-            console.error('Erro ao carregar instituições:', error);
+            console.error('Erro ao carregar dados iniciais:', error);
         } finally {
             setLoadingInstituicoes(false);
+            setLoadingPermissoes(false);
         }
     };
 
@@ -151,6 +167,23 @@ export default function NovoCargoPage() {
         }
     };
 
+    const handleSetorChange = async (setorId: string) => {
+        setFormData(prev => ({ ...prev, setorId, codigo: '' }));
+
+        if (setorId) {
+            try {
+                setLoadingCodigo(true);
+                const codigo = await gerarProximoCodigo('cargos', 3, 'setor_id', setorId);
+                setFormData(prev => ({ ...prev, setorId, codigo }));
+            } catch (err) {
+                console.error('Erro ao gerar código:', err);
+                setFormData(prev => ({ ...prev, setorId, codigo: '001' }));
+            } finally {
+                setLoadingCodigo(false);
+            }
+        }
+    };
+
     const validate = (): boolean => {
         const newErrors: Record<string, string> = {};
 
@@ -173,7 +206,7 @@ export default function NovoCargoPage() {
 
         try {
             setSaving(true);
-            await cargosService.criar({
+            const novoCargo = await cargosService.criar({
                 codigo: formData.codigo,
                 instituicao_id: formData.instituicaoId,
                 orgao_id: formData.orgaoId,
@@ -184,6 +217,12 @@ export default function NovoCargoPage() {
                 nivel: formData.nivel,
                 ativo: true,
             });
+
+            // Salvar permissões do cargo
+            if (permissoesAtribuidas.length > 0 && novoCargo?.id) {
+                await permissoesService.salvarPermissoesCargo(novoCargo.id, permissoesAtribuidas);
+            }
+
             router.push('/cadastros/cargos');
         } catch (error) {
             console.error('Erro ao criar cargo:', error);
@@ -203,7 +242,17 @@ export default function NovoCargoPage() {
         setOrgaos([]);
         setUnidades([]);
         setSetores([]);
+        setPermissoesAtribuidas([]);
     };
+
+    // Transfer List helpers
+    const availableItems: TransferItem[] = todasPermissoes
+        .filter(p => !permissoesAtribuidas.includes(p.id))
+        .map(p => ({ id: p.id, label: p.descricao || p.acao, group: p.modulo }));
+
+    const assignedItems: TransferItem[] = todasPermissoes
+        .filter(p => permissoesAtribuidas.includes(p.id))
+        .map(p => ({ id: p.id, label: p.descricao || p.acao, group: p.modulo }));
 
     return (
         <div className="space-y-6">
@@ -226,25 +275,8 @@ export default function NovoCargoPage() {
                 </CardHeader>
                 <CardContent>
                     <div className="grid gap-6">
-                        {/* Linha 1: Código e Vinculação Hierárquica Completa */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                            {/* Código */}
-                            <div className="space-y-2">
-                                <div className="flex items-center gap-1">
-                                    <Label htmlFor="codigo">Código<span className="text-red-500 ml-1">*</span></Label>
-                                    <FieldTooltip content="Código identificador (3 dígitos)" />
-                                </div>
-                                <Input
-                                    id="codigo"
-                                    value={formData.codigo}
-                                    onChange={(e) => setFormData({ ...formData, codigo: e.target.value.replace(/\D/g, '').substring(0, 3) })}
-                                    maxLength={3}
-                                    placeholder="001"
-                                    className={`font-mono w-full ${errors.codigo ? 'border-red-500' : ''}`}
-                                />
-                                {errors.codigo && <p className="text-sm text-red-500">{errors.codigo}</p>}
-                            </div>
-
+                        {/* Linha 1: Vinculação Hierárquica e Código */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                             {/* Instituição */}
                             <div className="space-y-2">
                                 <div className="flex items-center gap-1">
@@ -340,7 +372,7 @@ export default function NovoCargoPage() {
                                 ) : (
                                     <Select
                                         value={formData.setorId}
-                                        onValueChange={(valor) => setFormData({ ...formData, setorId: valor })}
+                                        onValueChange={handleSetorChange}
                                         disabled={!formData.unidadeGestoraId}
                                     >
                                         <SelectTrigger className={`w-full ${errors.setorId ? 'border-red-500' : ''}`}>
@@ -356,6 +388,24 @@ export default function NovoCargoPage() {
                                     </Select>
                                 )}
                                 {errors.setorId && <p className="text-sm text-red-500">{errors.setorId}</p>}
+                            </div>
+
+                            {/* Código (último, gerado após selecionar setor) */}
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-1">
+                                    <Label htmlFor="codigo">Código<span className="text-red-500 ml-1">*</span></Label>
+                                    <FieldTooltip content="Código sugerido automaticamente ao selecionar o setor. Pode ser editado." />
+                                </div>
+                                <Input
+                                    id="codigo"
+                                    value={formData.codigo}
+                                    onChange={(e) => setFormData({ ...formData, codigo: e.target.value.replace(/\D/g, '').substring(0, 3) })}
+                                    maxLength={3}
+                                    placeholder={loadingCodigo ? 'Gerando...' : '001'}
+                                    className={`font-mono w-full ${errors.codigo ? 'border-red-500' : ''}`}
+                                    disabled={loadingCodigo}
+                                />
+                                {errors.codigo && <p className="text-sm text-red-500">{errors.codigo}</p>}
                             </div>
                         </div>
 
@@ -408,6 +458,32 @@ export default function NovoCargoPage() {
                             />
                         </div>
                     </div>
+                </CardContent>
+            </Card>
+
+            {/* Permissões */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Permissões do Cargo</CardTitle>
+                    <CardDescription>Selecione as permissões que este cargo terá acesso em cada módulo</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {loadingPermissoes ? (
+                        <div className="flex items-center justify-center py-12">
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : (
+                        <TransferList
+                            available={availableItems}
+                            assigned={assignedItems}
+                            onAssign={(items) => setPermissoesAtribuidas(prev => [...prev, ...items.map(i => i.id)])}
+                            onRemove={(items) => setPermissoesAtribuidas(prev => prev.filter(id => !items.some(i => i.id === id)))}
+                            onAssignAll={() => setPermissoesAtribuidas(todasPermissoes.map(p => p.id))}
+                            onRemoveAll={() => setPermissoesAtribuidas([])}
+                            leftTitle="Permissões Disponíveis"
+                            rightTitle="Permissões Atribuídas"
+                        />
+                    )}
                 </CardContent>
             </Card>
 

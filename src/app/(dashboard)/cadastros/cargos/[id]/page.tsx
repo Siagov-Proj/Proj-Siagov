@@ -18,16 +18,19 @@ import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { maskCodigoComZeros } from '@/utils/masks';
 import { FIELD_LIMITS } from '@/utils/constants';
 import { ArrowLeft, Loader2 } from 'lucide-react';
+import { TransferList, TransferItem } from '@/components/ui/transfer-list';
 import {
     cargosService,
     instituicoesService,
     orgaosService,
     unidadesService,
     setoresService,
+    permissoesService,
     IInstituicaoDB,
     IOrgaoDB,
     IUnidadeGestoraDB,
-    ISetorDB
+    ISetorDB,
+    IPermissaoDB
 } from '@/services/api';
 
 const NIVEIS_CARGO = [
@@ -68,34 +71,43 @@ export default function EditarCargoPage() {
     const [loadingUnidades, setLoadingUnidades] = useState(false);
     const [loadingSetores, setLoadingSetores] = useState(false);
 
+    // Permissões
+    const [todasPermissoes, setTodasPermissoes] = useState<IPermissaoDB[]>([]);
+    const [permissoesAtribuidas, setPermissoesAtribuidas] = useState<string[]>([]);
+    const [loadingPermissoes, setLoadingPermissoes] = useState(true);
+
     const carregarDados = useCallback(async () => {
         try {
             setLoading(true);
             const id = params.id as string;
 
-            const [cargo, listaInstituicoes] = await Promise.all([
+            const [cargo, listaInstituicoes, listaPermissoes] = await Promise.all([
                 cargosService.buscarPorId(id),
                 instituicoesService.listar(),
+                permissoesService.listar(),
             ]);
 
             setInstituicoes(listaInstituicoes);
+            setTodasPermissoes(listaPermissoes);
 
             if (cargo) {
                 // Carregar dependências em cascata
+                const promises: Promise<any>[] = [];
+
                 if (cargo.instituicao_id) {
-                    const listaOrgaos = await orgaosService.listarPorInstituicao(cargo.instituicao_id);
-                    setOrgaos(listaOrgaos);
+                    promises.push(orgaosService.listarPorInstituicao(cargo.instituicao_id).then(setOrgaos));
                 }
-
                 if (cargo.orgao_id) {
-                    const listaUnidades = await unidadesService.listarPorOrgao(cargo.orgao_id);
-                    setUnidades(listaUnidades);
+                    promises.push(unidadesService.listarPorOrgao(cargo.orgao_id).then(setUnidades));
+                }
+                if (cargo.unidade_gestora_id) {
+                    promises.push(setoresService.listarPorUnidadeGestora(cargo.unidade_gestora_id).then(setSetores));
                 }
 
-                if (cargo.unidade_gestora_id) {
-                    const listaSetores = await setoresService.listarPorUnidadeGestora(cargo.unidade_gestora_id);
-                    setSetores(listaSetores);
-                }
+                // Carregar permissões do cargo
+                promises.push(permissoesService.listarPorCargo(id).then(setPermissoesAtribuidas));
+
+                await Promise.all(promises);
 
                 const data = {
                     codigo: cargo.codigo,
@@ -119,6 +131,7 @@ export default function EditarCargoPage() {
             router.push('/cadastros/cargos');
         } finally {
             setLoading(false);
+            setLoadingPermissoes(false);
         }
     }, [params.id, router]);
 
@@ -225,6 +238,10 @@ export default function EditarCargoPage() {
                 descricao: formData.descricao,
                 nivel: formData.nivel,
             });
+
+            // Salvar permissões
+            await permissoesService.salvarPermissoesCargo(params.id as string, permissoesAtribuidas);
+
             router.push('/cadastros/cargos');
         } catch (err) {
             console.error('Erro ao atualizar cargo:', err);
@@ -242,6 +259,15 @@ export default function EditarCargoPage() {
         // Recarregar os dados originais
         carregarDados();
     };
+
+    // Transfer List helpers
+    const availableItems: TransferItem[] = todasPermissoes
+        .filter(p => !permissoesAtribuidas.includes(p.id))
+        .map(p => ({ id: p.id, label: p.descricao || p.acao, group: p.modulo }));
+
+    const assignedItems: TransferItem[] = todasPermissoes
+        .filter(p => permissoesAtribuidas.includes(p.id))
+        .map(p => ({ id: p.id, label: p.descricao || p.acao, group: p.modulo }));
 
     if (loading) {
         return (
@@ -452,6 +478,32 @@ export default function EditarCargoPage() {
                             />
                         </div>
                     </div>
+                </CardContent>
+            </Card>
+
+            {/* Permissões */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Permissões do Cargo</CardTitle>
+                    <CardDescription>Selecione as permissões que este cargo terá acesso em cada módulo</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {loadingPermissoes ? (
+                        <div className="flex items-center justify-center py-12">
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : (
+                        <TransferList
+                            available={availableItems}
+                            assigned={assignedItems}
+                            onAssign={(items) => setPermissoesAtribuidas(prev => [...prev, ...items.map(i => i.id)])}
+                            onRemove={(items) => setPermissoesAtribuidas(prev => prev.filter(id => !items.some(i => i.id === id)))}
+                            onAssignAll={() => setPermissoesAtribuidas(todasPermissoes.map(p => p.id))}
+                            onRemoveAll={() => setPermissoesAtribuidas([])}
+                            leftTitle="Permissões Disponíveis"
+                            rightTitle="Permissões Atribuídas"
+                        />
+                    )}
                 </CardContent>
             </Card>
 

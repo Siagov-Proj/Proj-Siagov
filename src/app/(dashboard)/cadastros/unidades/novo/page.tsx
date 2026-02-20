@@ -19,7 +19,7 @@ import { maskCnpj, maskCep, maskTelefone } from '@/utils/masks';
 import { TIPOS_ADMINISTRACAO, GRUPOS_INDIRETA, FIELD_LIMITS } from '@/utils/constants';
 import type { IUnidadeGestora } from '@/types';
 import { ArrowLeft, Loader2 } from 'lucide-react';
-import { unidadesService, instituicoesService, orgaosService, IInstituicaoDB, IOrgaoDB } from '@/services/api';
+import { unidadesService, instituicoesService, orgaosService, IInstituicaoDB, IOrgaoDB, gerarProximoCodigo } from '@/services/api';
 
 const emptyFormData = {
     codigo: '',
@@ -62,6 +62,7 @@ export default function NovaUnidadePage() {
     // Loading states
     const [loadingInstituicoes, setLoadingInstituicoes] = useState(true);
     const [loadingOrgaos, setLoadingOrgaos] = useState(false);
+    const [loadingCodigo, setLoadingCodigo] = useState(false);
 
     // Carregar instituições ao iniciar
     useEffect(() => {
@@ -100,6 +101,24 @@ export default function NovaUnidadePage() {
         };
         carregarOrgaos();
     }, [formData.instituicaoId]);
+
+    // Gerar código quando o órgão mudar
+    useEffect(() => {
+        const gerarCodigo = async () => {
+            if (!formData.orgaoId) return;
+            try {
+                setLoadingCodigo(true);
+                const codigo = await gerarProximoCodigo('unidades_gestoras', 6, 'orgao_id', formData.orgaoId);
+                setFormData(prev => ({ ...prev, codigo }));
+            } catch (err) {
+                console.error('Erro ao gerar código:', err);
+                setFormData(prev => ({ ...prev, codigo: '000001' }));
+            } finally {
+                setLoadingCodigo(false);
+            }
+        };
+        gerarCodigo();
+    }, [formData.orgaoId]);
 
     const validate = (): boolean => {
         const newErrors: Record<string, string> = {};
@@ -194,24 +213,7 @@ export default function NovaUnidadePage() {
                 </CardHeader>
                 <CardContent>
                     <div className="grid gap-6">
-                        {/* Código */}
-                        <div className="space-y-2">
-                            <div className="flex items-center gap-1">
-                                <Label htmlFor="codigo">Código<span className="text-red-500 ml-1">*</span></Label>
-                                <FieldTooltip content="Código gerado manualmente (6 dígitos)" />
-                            </div>
-                            <Input
-                                id="codigo"
-                                value={formData.codigo}
-                                onChange={(e) => setFormData({ ...formData, codigo: e.target.value.replace(/\D/g, '').substring(0, 6) })}
-                                maxLength={6}
-                                placeholder="000000"
-                                className={`font-mono w-32 ${errors.codigo ? 'border-red-500' : ''}`}
-                            />
-                            {errors.codigo && <p className="text-sm text-red-500">{errors.codigo}</p>}
-                        </div>
-
-                        {/* Instituição e Órgão */}
+                        {/* Instituição e Órgão (primeiro, para gerar o código) */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <div className="flex items-center gap-1">
@@ -276,6 +278,25 @@ export default function NovaUnidadePage() {
                                 )}
                                 {errors.orgaoId && <p className="text-sm text-red-500">{errors.orgaoId}</p>}
                             </div>
+                        </div>
+
+                        {/* Código (gerado após selecionar órgão) */}
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-1">
+                                <Label htmlFor="codigo">Código<span className="text-red-500 ml-1">*</span></Label>
+                                <FieldTooltip content="Código sugerido automaticamente ao selecionar o órgão. Pode ser editado." />
+                            </div>
+                            <Input
+                                id="codigo"
+                                value={formData.codigo}
+                                onChange={(e) => setFormData({ ...formData, codigo: e.target.value.replace(/\D/g, '').substring(0, 6) })}
+                                maxLength={6}
+                                placeholder={loadingCodigo ? 'Gerando...' : '000000'}
+                                className={`font-mono w-32 ${errors.codigo ? 'border-red-500' : ''}`}
+                                disabled={loadingCodigo}
+                            />
+                            {loadingCodigo && <p className="text-xs text-muted-foreground">Gerando código sequencial...</p>}
+                            {errors.codigo && <p className="text-sm text-red-500">{errors.codigo}</p>}
                         </div>
 
                         {/* Nome e Sigla */}

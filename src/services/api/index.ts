@@ -38,3 +38,14 @@ export type { ICredorDB } from './credoresService';
 
 export { categoriasDocService } from './categoriasDocService';
 export type { ICategoriaDocumentoDB, ISubcategoriaDocumentoDB } from './categoriasDocService';
+
+export { auditService } from './auditService';
+export type { IAuditLog } from './auditService';
+
+export { sequenceService, gerarProximoCodigo } from './sequenceService';
+
+export { lotacoesService } from './lotacoesService';
+export type { ILotacaoDB, ILotacaoComInstituicao } from './lotacoesService';
+
+export { permissoesService } from './permissoesService';
+export type { IPermissaoDB, ICargoPermissaoDB } from './permissoesService';

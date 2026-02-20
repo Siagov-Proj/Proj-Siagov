@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { IAuthUser, IInstituicao } from '@/types';
+import type { IAuthUser, IInstituicao, ILotacaoAuth } from '@/types';
 
 interface AuthState {
     user: IAuthUser | null;
@@ -10,12 +10,16 @@ interface AuthState {
     token: string | null;
     exercicioCorrente: number;
     instituicaoCorrente: IInstituicao | null;
+    lotacaoAtiva: ILotacaoAuth | null;
+    lotacoes: ILotacaoAuth[];
 
     // Actions
     login: (user: IAuthUser, token: string) => void;
     logout: () => void;
     setExercicioCorrente: (ano: number) => void;
     setInstituicaoCorrente: (instituicao: IInstituicao) => void;
+    setLotacaoAtiva: (lotacao: ILotacaoAuth) => void;
+    setLotacoes: (lotacoes: ILotacaoAuth[]) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -26,12 +30,15 @@ export const useAuthStore = create<AuthState>()(
             token: null,
             exercicioCorrente: new Date().getFullYear(),
             instituicaoCorrente: null,
+            lotacaoAtiva: null,
+            lotacoes: [],
 
             login: (user, token) =>
                 set({
                     user,
                     token,
                     isAuthenticated: true,
+                    lotacoes: user.lotacoes || [],
                 }),
 
             logout: () =>
@@ -39,6 +46,9 @@ export const useAuthStore = create<AuthState>()(
                     user: null,
                     token: null,
                     isAuthenticated: false,
+                    lotacaoAtiva: null,
+                    lotacoes: [],
+                    instituicaoCorrente: null,
                 }),
 
             setExercicioCorrente: (ano) =>
@@ -49,6 +59,16 @@ export const useAuthStore = create<AuthState>()(
             setInstituicaoCorrente: (instituicao) =>
                 set({
                     instituicaoCorrente: instituicao,
+                }),
+
+            setLotacaoAtiva: (lotacao) =>
+                set({
+                    lotacaoAtiva: lotacao,
+                }),
+
+            setLotacoes: (lotacoes) =>
+                set({
+                    lotacoes,
                 }),
         }),
         {
@@ -66,10 +86,14 @@ export const useAuth = () => {
         isAuthenticated: store.isAuthenticated,
         exercicioCorrente: store.exercicioCorrente,
         instituicaoCorrente: store.instituicaoCorrente,
+        lotacaoAtiva: store.lotacaoAtiva,
+        lotacoes: store.lotacoes,
         login: store.login,
         logout: store.logout,
         setExercicioCorrente: store.setExercicioCorrente,
         setInstituicaoCorrente: store.setInstituicaoCorrente,
+        setLotacaoAtiva: store.setLotacaoAtiva,
+        setLotacoes: store.setLotacoes,
     };
 };
 

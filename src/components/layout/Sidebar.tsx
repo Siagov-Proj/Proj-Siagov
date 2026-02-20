@@ -21,6 +21,7 @@ import {
     ChevronDown,
     ChevronRight,
     LogOut,
+    ShieldCheck,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -84,6 +85,12 @@ const menuItems: MenuItem[] = [
         icon: <Settings className="h-5 w-5" />,
         path: '/configuracoes',
     },
+    {
+        id: 'auditoria',
+        label: 'Auditoria',
+        icon: <ShieldCheck className="h-5 w-5 text-primary/80" />,
+        path: '/cadastros/auditoria',
+    },
 ];
 
 interface SidebarProps {
@@ -103,8 +110,14 @@ export function Sidebar({ isCollapsed = false, onToggle, onLogout }: SidebarProp
         );
     };
 
-    const isActive = (path: string) => {
-        if (path === '/dashboard') return pathname === '/dashboard' || pathname === '/';
+    const isActive = (path: string, id: string) => {
+        if (id === 'dashboard') return pathname === '/dashboard' || pathname === '/';
+
+        // Se estiver na página de auditoria, o item 'cadastros' não deve ficar ativo
+        if (id === 'cadastros' && pathname.startsWith('/cadastros/auditoria')) {
+            return false;
+        }
+
         return pathname.startsWith(path);
     };
 
@@ -116,7 +129,7 @@ export function Sidebar({ isCollapsed = false, onToggle, onLogout }: SidebarProp
     const renderMenuItem = (item: MenuItem, level = 0) => {
         const hasChildren = item.children && item.children.length > 0;
         const isOpen = openMenus.includes(item.id);
-        const itemIsActive = item.id === 'dashboard' ? isActive('/dashboard') : (item.path ? isActive(item.path) : false);
+        const itemIsActive = item.path ? isActive(item.path, item.id) : false;
 
         if (hasChildren && !isCollapsed) {
             return (

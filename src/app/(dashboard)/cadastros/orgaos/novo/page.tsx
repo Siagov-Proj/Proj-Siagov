@@ -19,10 +19,10 @@ import { maskCnpj, maskCodigoComZeros } from '@/utils/masks';
 import { PODERES, FIELD_LIMITS } from '@/utils/constants';
 import type { IOrgao } from '@/types';
 import { ArrowLeft, Loader2 } from 'lucide-react';
-import { instituicoesService, IInstituicaoDB, orgaosService } from '@/services/api';
+import { instituicoesService, IInstituicaoDB, orgaosService, gerarProximoCodigo } from '@/services/api';
 
 const emptyFormData = {
-    codigo: '000003', // Mock auto-generated
+    codigo: '',
     instituicaoId: '',
     poderVinculado: '' as IOrgao['poderVinculado'] | '',
     nome: '',
@@ -41,6 +41,7 @@ export default function NovoOrgaoPage() {
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [instituicoes, setInstituicoes] = useState<IInstituicaoDB[]>([]);
     const [loadingInstituicoes, setLoadingInstituicoes] = useState(true);
+    const [loadingCodigo, setLoadingCodigo] = useState(false);
 
     const carregarInstituicoes = useCallback(async () => {
         try {
@@ -57,6 +58,24 @@ export default function NovoOrgaoPage() {
     useEffect(() => {
         carregarInstituicoes();
     }, [carregarInstituicoes]);
+
+    // Gerar código quando a instituição for selecionada
+    const handleInstituicaoChange = async (instituicaoId: string) => {
+        setFormData(prev => ({ ...prev, instituicaoId, codigo: '' }));
+
+        if (instituicaoId) {
+            try {
+                setLoadingCodigo(true);
+                const codigo = await gerarProximoCodigo('orgaos', 6, 'instituicao_id', instituicaoId);
+                setFormData(prev => ({ ...prev, instituicaoId, codigo }));
+            } catch (err) {
+                console.error('Erro ao gerar código do órgão:', err);
+                setFormData(prev => ({ ...prev, instituicaoId, codigo: '000001' }));
+            } finally {
+                setLoadingCodigo(false);
+            }
+        }
+    };
 
     const validate = (): boolean => {
         const newErrors: Record<string, string> = {};
@@ -131,34 +150,14 @@ export default function NovoOrgaoPage() {
                 </CardHeader>
                 <CardContent>
                     <div className="grid gap-6">
-                        {/* Código e Instituição */}
+                        {/* Instituição (primeiro, para gerar o código) */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <div className="flex items-center gap-1">
-                                    <Label htmlFor="codigo">
-                                        Código<span className="text-red-500 ml-1">*</span>
-                                    </Label>
-                                    <FieldTooltip content="Código de 6 dígitos do órgão, conforme sistema de orçamento" />
-                                </div>
-                                <Input
-                                    id="codigo"
-                                    value={formData.codigo}
-                                    onChange={(e) =>
-                                        setFormData({ ...formData, codigo: maskCodigoComZeros(e.target.value, 6) })
-                                    }
-                                    maxLength={6}
-                                    placeholder="000001"
-                                    className={errors.codigo ? 'border-red-500' : ''}
-                                />
-                                {errors.codigo && <p className="text-sm text-red-500">{errors.codigo}</p>}
-                            </div>
-
                             <div className="space-y-2">
                                 <div className="flex items-center gap-1">
                                     <Label htmlFor="instituicaoId">
                                         Instituição<span className="text-red-500 ml-1">*</span>
                                     </Label>
-                                    <FieldTooltip content="Instituição à qual o órgão está vinculado" />
+                                    <FieldTooltip content="Instituição à qual o órgão está vinculado. Ao selecionar, o código será sugerido automaticamente." />
                                 </div>
                                 {loadingInstituicoes ? (
                                     <div className="flex items-center gap-2 h-10 border rounded-md px-3">
@@ -168,7 +167,7 @@ export default function NovoOrgaoPage() {
                                 ) : (
                                     <Select
                                         value={formData.instituicaoId}
-                                        onValueChange={(value) => setFormData({ ...formData, instituicaoId: value })}
+                                        onValueChange={handleInstituicaoChange}
                                     >
                                         <SelectTrigger className={errors.instituicaoId ? 'border-red-500' : ''}>
                                             <SelectValue placeholder="Selecione a instituição" />
@@ -183,6 +182,32 @@ export default function NovoOrgaoPage() {
                                     </Select>
                                 )}
                                 {errors.instituicaoId && <p className="text-sm text-red-500">{errors.instituicaoId}</p>}
+                            </div>
+
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-1">
+                                    <Label htmlFor="codigo">
+                                        Código<span className="text-red-500 ml-1">*</span>
+                                    </Label>
+                                    <FieldTooltip content="Código de 6 dígitos sugerido automaticamente ao selecionar a instituição. Pode ser editado." />
+                                </div>
+                                <div className="relative">
+                                    <Input
+                                        id="codigo"
+                                        value={formData.codigo}
+                                        onChange={(e) =>
+                                            setFormData({ ...formData, codigo: maskCodigoComZeros(e.target.value, 6) })
+                                        }
+                                        maxLength={6}
+                                        placeholder={loadingCodigo ? 'Gerando...' : '000001'}
+                                        className={`font-mono ${errors.codigo ? 'border-red-500' : ''}`}
+                                        disabled={loadingCodigo}
+                                    />
+                                    {loadingCodigo && (
+                                        <Loader2 className="absolute right-3 top-3 h-4 w-4 animate-spin text-muted-foreground" />
+                                    )}
+                                </div>
+                                {errors.codigo && <p className="text-sm text-red-500">{errors.codigo}</p>}
                             </div>
                         </div>
 
