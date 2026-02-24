@@ -37,7 +37,13 @@ export { credoresService } from './credoresService';
 export type { ICredorDB } from './credoresService';
 
 export { categoriasDocService } from './categoriasDocService';
-export type { ICategoriaDocumentoDB, ISubcategoriaDocumentoDB } from './categoriasDocService';
+export type { ICategoriaDocumentoDB, ISubcategoriaDocumentoDB, ICategoriaOrgaoDB } from './categoriasDocService';
+
+export { leisNormativasService } from './leisNormativasService';
+export type { ILeiNormativaDB } from './leisNormativasService';
+
+export { titulosNormativosService } from './titulosNormativosService';
+export type { ITituloNormativoDB } from './titulosNormativosService';
 
 export { auditService } from './auditService';
 export type { IAuditLog } from './auditService';

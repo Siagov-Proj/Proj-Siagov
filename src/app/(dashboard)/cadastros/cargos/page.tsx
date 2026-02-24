@@ -14,8 +14,14 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { Plus, Search, Pencil, Trash2, UserCheck, ArrowLeft, Loader2 } from 'lucide-react';
-import { cargosService, ICargoDB } from '@/services/api';
+import { cargosService, ICargoDB, permissoesService, IPermissaoDB } from '@/services/api';
 
 export default function CargosPage() {
     const router = useRouter();
@@ -23,12 +29,22 @@ export default function CargosPage() {
     const [termoBusca, setTermoBusca] = useState('');
     const [loading, setLoading] = useState(true);
     const [deleting, setDeleting] = useState<string | null>(null);
+    const [permissoesPorCargo, setPermissoesPorCargo] = useState<Record<string, IPermissaoDB[]>>({});
 
     const carregarCargos = useCallback(async () => {
         try {
             setLoading(true);
             const dados = await cargosService.listar(termoBusca);
             setCargos(dados);
+
+            // Batch-fetch permissões para todos os cargos
+            if (dados.length > 0) {
+                const ids = dados.map((c) => c.id);
+                const perms = await permissoesService.listarPermissoesPorCargos(ids);
+                setPermissoesPorCargo(perms);
+            } else {
+                setPermissoesPorCargo({});
+            }
         } catch (err) {
             console.error('Erro ao carregar cargos:', err);
         } finally {
@@ -64,6 +80,17 @@ export default function CargosPage() {
                 setDeleting(null);
             }
         }
+    };
+
+    // Agrupa permissões por módulo para exibição
+    const agruparPermissoes = (permissoes: IPermissaoDB[]): Record<string, IPermissaoDB[]> => {
+        const grupos: Record<string, IPermissaoDB[]> = {};
+        permissoes.forEach((p) => {
+            const modulo = p.modulo || 'Outros';
+            if (!grupos[modulo]) grupos[modulo] = [];
+            grupos[modulo].push(p);
+        });
+        return grupos;
     };
 
     return (
@@ -126,48 +153,84 @@ export default function CargosPage() {
                                         <TableHead className="w-20">Código</TableHead>
                                         <TableHead>Nome</TableHead>
                                         <TableHead>Nível</TableHead>
+                                        <TableHead>Permissões</TableHead>
                                         <TableHead className="w-24 text-center">Ações</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {cargos.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                                            <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                                                 Nenhum cargo encontrado
                                             </TableCell>
                                         </TableRow>
                                     ) : (
-                                        cargos.map((cargo) => (
-                                            <TableRow key={cargo.id}>
-                                                <TableCell className="font-mono">{cargo.codigo}</TableCell>
-                                                <TableCell className="font-medium">{cargo.nome}</TableCell>
-                                                <TableCell className="text-sm">{cargo.nivel || '-'}</TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center justify-center gap-1">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            onClick={() => handleEdit(cargo.id)}
-                                                        >
-                                                            <Pencil className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            onClick={() => handleDelete(cargo.id)}
-                                                            className="text-red-500 hover:text-red-600"
-                                                            disabled={deleting === cargo.id}
-                                                        >
-                                                            {deleting === cargo.id ? (
-                                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                        <TooltipProvider delayDuration={200}>
+                                            {cargos.map((cargo) => {
+                                                const permissoes = permissoesPorCargo[cargo.id] || [];
+                                                const grupos = agruparPermissoes(permissoes);
+
+                                                return (
+                                                    <TableRow key={cargo.id}>
+                                                        <TableCell className="font-mono">{cargo.codigo}</TableCell>
+                                                        <TableCell className="font-medium">{cargo.nome}</TableCell>
+                                                        <TableCell className="text-sm">{cargo.nivel || '-'}</TableCell>
+                                                        <TableCell>
+                                                            {permissoes.length === 0 ? (
+                                                                <span className="text-xs text-muted-foreground italic">Nenhuma</span>
                                                             ) : (
-                                                                <Trash2 className="h-4 w-4" />
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {Object.entries(grupos).map(([modulo, perms]) => (
+                                                                        <Tooltip key={modulo}>
+                                                                            <TooltipTrigger asChild>
+                                                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 cursor-default">
+                                                                                    {modulo}
+                                                                                    <span className="bg-blue-200 dark:bg-blue-800 text-blue-700 dark:text-blue-200 rounded-full px-1.5 text-[10px] font-bold">
+                                                                                        {perms.length}
+                                                                                    </span>
+                                                                                </span>
+                                                                            </TooltipTrigger>
+                                                                            <TooltipContent side="bottom" className="max-w-xs">
+                                                                                <p className="font-semibold text-xs mb-1">{modulo}</p>
+                                                                                <ul className="text-xs space-y-0.5">
+                                                                                    {perms.map((p) => (
+                                                                                        <li key={p.id}>• {p.descricao || p.acao}</li>
+                                                                                    ))}
+                                                                                </ul>
+                                                                            </TooltipContent>
+                                                                        </Tooltip>
+                                                                    ))}
+                                                                </div>
                                                             )}
-                                                        </Button>
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))
+                                                        </TableCell>
+                                                        <TableCell>
+                                                            <div className="flex items-center justify-center gap-1">
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    onClick={() => handleEdit(cargo.id)}
+                                                                >
+                                                                    <Pencil className="h-4 w-4" />
+                                                                </Button>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon"
+                                                                    onClick={() => handleDelete(cargo.id)}
+                                                                    className="text-red-500 hover:text-red-600"
+                                                                    disabled={deleting === cargo.id}
+                                                                >
+                                                                    {deleting === cargo.id ? (
+                                                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                                                    ) : (
+                                                                        <Trash2 className="h-4 w-4" />
+                                                                    )}
+                                                                </Button>
+                                                            </div>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                );
+                                            })}
+                                        </TooltipProvider>
                                     )}
                                 </TableBody>
                             </Table>

@@ -92,4 +92,34 @@ export const permissoesService = {
             }
         }
     },
+
+    /**
+     * Lista permissões de vários cargos de uma vez (batch)
+     * Retorna Record<cargo_id, IPermissaoDB[]>
+     */
+    async listarPermissoesPorCargos(cargoIds: string[]): Promise<Record<string, IPermissaoDB[]>> {
+        if (cargoIds.length === 0) return {};
+
+        const supabase = getSupabaseClient();
+        const { data, error } = await supabase
+            .from('cargo_permissao')
+            .select('cargo_id, permissoes:permissao_id(id, modulo, acao, descricao, created_at)')
+            .in('cargo_id', cargoIds);
+
+        if (error) {
+            console.error('Erro ao listar permissões por cargos:', error);
+            throw error;
+        }
+
+        const result: Record<string, IPermissaoDB[]> = {};
+        (data || []).forEach((row: any) => {
+            const cargoId = row.cargo_id;
+            if (!result[cargoId]) result[cargoId] = [];
+            if (row.permissoes) {
+                result[cargoId].push(row.permissoes as IPermissaoDB);
+            }
+        });
+
+        return result;
+    },
 };

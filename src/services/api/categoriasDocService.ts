@@ -10,11 +10,22 @@ export interface ICategoriaDocumentoDB {
     nome: string;
     descricao?: string;
     lei?: string;
+    titulo_id?: string;
     cor?: string;
     ativo: boolean;
     excluido: boolean;
     created_at: string;
     updated_at: string;
+    titulo?: {
+        id: string;
+        nome: string;
+        lei_id: string;
+        lei?: {
+            id: string;
+            nome: string;
+        };
+    };
+    orgaos_vinculados?: { orgao_id: string; orgao?: { id: string; nome: string; codigo: string } }[];
 }
 
 export interface ISubcategoriaDocumentoDB {
@@ -28,8 +39,16 @@ export interface ISubcategoriaDocumentoDB {
     updated_at: string;
 }
 
+export interface ICategoriaOrgaoDB {
+    id: string;
+    categoria_id: string;
+    orgao_id: string;
+    created_at: string;
+}
+
 const TABLE_CATEGORIAS = 'categorias_documentos';
 const TABLE_SUBCATEGORIAS = 'subcategorias_documentos';
+const TABLE_CATEGORIAS_ORGAOS = 'categorias_orgaos';
 
 export const categoriasDocService = {
     // ========== CATEGORIAS ==========
@@ -37,7 +56,17 @@ export const categoriasDocService = {
         const supabase = getSupabaseClient();
         let query = supabase
             .from(TABLE_CATEGORIAS)
-            .select('*')
+            .select(`
+                *,
+                titulo:titulos_normativos(
+                    id, nome, lei_id,
+                    lei:leis_normativas(id, nome)
+                ),
+                orgaos_vinculados:categorias_orgaos(
+                    orgao_id,
+                    orgao:orgaos(id, nome, codigo)
+                )
+            `)
             .eq('excluido', false)
             .order('nome', { ascending: true });
 
@@ -59,7 +88,17 @@ export const categoriasDocService = {
         const supabase = getSupabaseClient();
         const { data, error } = await supabase
             .from(TABLE_CATEGORIAS)
-            .select('*')
+            .select(`
+                *,
+                titulo:titulos_normativos(
+                    id, nome, lei_id,
+                    lei:leis_normativas(id, nome)
+                ),
+                orgaos_vinculados:categorias_orgaos(
+                    orgao_id,
+                    orgao:orgaos(id, nome, codigo)
+                )
+            `)
             .eq('id', id)
             .eq('excluido', false)
             .single();
@@ -233,5 +272,59 @@ export const categoriasDocService = {
         }
 
         return count || 0;
-    }
+    },
+
+    // ========== ÓRGÃOS VINCULADOS ==========
+    async vincularOrgaos(categoriaId: string, orgaoIds: string[]): Promise<void> {
+        if (orgaoIds.length === 0) return;
+
+        const supabase = getSupabaseClient();
+        const registros = orgaoIds.map(orgaoId => ({
+            categoria_id: categoriaId,
+            orgao_id: orgaoId,
+        }));
+
+        const { error } = await supabase
+            .from(TABLE_CATEGORIAS_ORGAOS)
+            .upsert(registros, { onConflict: 'categoria_id,orgao_id' });
+
+        if (error) {
+            console.error('Erro ao vincular órgãos:', error);
+            throw error;
+        }
+    },
+
+    async desvincularOrgaos(categoriaId: string): Promise<void> {
+        const supabase = getSupabaseClient();
+        const { error } = await supabase
+            .from(TABLE_CATEGORIAS_ORGAOS)
+            .delete()
+            .eq('categoria_id', categoriaId);
+
+        if (error) {
+            console.error('Erro ao desvincular órgãos:', error);
+            throw error;
+        }
+    },
+
+    async atualizarOrgaosVinculados(categoriaId: string, orgaoIds: string[]): Promise<void> {
+        // Remove todos e recria
+        await this.desvincularOrgaos(categoriaId);
+        await this.vincularOrgaos(categoriaId, orgaoIds);
+    },
+
+    async listarOrgaosVinculados(categoriaId: string): Promise<string[]> {
+        const supabase = getSupabaseClient();
+        const { data, error } = await supabase
+            .from(TABLE_CATEGORIAS_ORGAOS)
+            .select('orgao_id')
+            .eq('categoria_id', categoriaId);
+
+        if (error) {
+            console.error('Erro ao listar órgãos vinculados:', error);
+            throw error;
+        }
+
+        return (data || []).map((d: { orgao_id: string }) => d.orgao_id);
+    },
 };

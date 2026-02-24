@@ -40,24 +40,17 @@ import {
     Scale,
     Loader2,
 } from 'lucide-react';
-import { categoriasDocService, ICategoriaDocumentoDB, ISubcategoriaDocumentoDB } from '@/services/api';
+import { categoriasDocService, leisNormativasService, ICategoriaDocumentoDB, ISubcategoriaDocumentoDB, ILeiNormativaDB } from '@/services/api';
 
 // Tipo estendido para incluir subcategorias
 interface ICategoriaComSubcategorias extends ICategoriaDocumentoDB {
     subcategorias?: ISubcategoriaDocumentoDB[];
 }
 
-// Leis disponíveis para filtro
-const LEIS = [
-    'Lei 14.133/2021',
-    'Lei 8.666/93',
-    'Lei 13.019/14',
-    'Lei 10.520/02',
-];
-
 export default function CategoriasDocumentosPage() {
     const router = useRouter();
     const [categorias, setCategorias] = useState<ICategoriaComSubcategorias[]>([]);
+    const [leis, setLeis] = useState<ILeiNormativaDB[]>([]);
     const [loading, setLoading] = useState(true);
     const [termoBusca, setTermoBusca] = useState('');
     const [filtroLei, setFiltroLei] = useState('todas');
@@ -67,16 +60,22 @@ export default function CategoriasDocumentosPage() {
     const carregarCategorias = useCallback(async () => {
         try {
             setLoading(true);
-            let dados = await categoriasDocService.listarCategorias(termoBusca);
+            const [dados, leisData] = await Promise.all([
+                categoriasDocService.listarCategorias(termoBusca),
+                leisNormativasService.listarAtivas(),
+            ]);
+
+            setLeis(leisData);
 
             // Filtrar por lei se necessário
+            let filtrados = dados;
             if (filtroLei !== 'todas') {
-                dados = dados.filter(cat => cat.lei === filtroLei);
+                filtrados = dados.filter(cat => cat.titulo?.lei_id === filtroLei);
             }
 
             // Load subcategorias for each category
             const categoriasComSubcategorias: ICategoriaComSubcategorias[] = await Promise.all(
-                dados.map(async (cat) => {
+                filtrados.map(async (cat) => {
                     const subcategorias = await categoriasDocService.listarSubcategorias(cat.id);
                     return { ...cat, subcategorias };
                 })
@@ -206,9 +205,9 @@ export default function CategoriasDocumentosPage() {
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="todas">Todas as Leis</SelectItem>
-                                {LEIS.map((lei) => (
-                                    <SelectItem key={lei} value={lei}>
-                                        {lei}
+                                {leis.map((lei) => (
+                                    <SelectItem key={lei.id} value={lei.id}>
+                                        {lei.nome}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
@@ -264,7 +263,7 @@ export default function CategoriasDocumentosPage() {
                                             <div className="flex items-center gap-3">
                                                 <Badge variant="outline" className="flex items-center gap-1">
                                                     <Scale className="h-3 w-3" />
-                                                    {cat.lei || '-'}
+                                                    {cat.titulo?.lei?.nome || cat.lei || '-'}
                                                 </Badge>
                                                 <Badge variant="secondary">
                                                     {cat.subcategorias?.length || 0} subcategoria(s)

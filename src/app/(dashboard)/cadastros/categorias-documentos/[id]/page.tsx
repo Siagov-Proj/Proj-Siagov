@@ -13,21 +13,32 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { ActionBar } from '@/components/ui/action-bar';
-import { ArrowLeft, FolderOpen, Loader2 } from 'lucide-react';
-import { categoriasDocService } from '@/services/api';
-
-const LEIS = [
-    'Lei 14.133/2021',
-    'Lei 8.666/93',
-    'Lei 13.019/14',
-    'Lei 10.520/02',
-];
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { ArrowLeft, FolderOpen, Loader2, HelpCircle } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import {
+    categoriasDocService,
+    leisNormativasService,
+    titulosNormativosService,
+    orgaosService,
+    ILeiNormativaDB,
+    IOrgaoDB,
+} from '@/services/api';
 
 const formVazio = {
     nome: '',
     descricao: '',
-    lei: '',
+    leiId: '',
+    tituloNome: '',
+    tituloId: '',
+    ativo: true,
 };
 
 export default function EditarCategoriaPage() {
@@ -39,28 +50,52 @@ export default function EditarCategoriaPage() {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
+    // Dados carregados
+    const [leis, setLeis] = useState<ILeiNormativaDB[]>([]);
+    const [orgaos, setOrgaos] = useState<IOrgaoDB[]>([]);
+    const [orgaosSelecionados, setOrgaosSelecionados] = useState<string[]>([]);
+    const [orgaosOriginal, setOrgaosOriginal] = useState<string[]>([]);
+    const [selecionarTodosOrgaos, setSelecionarTodosOrgaos] = useState(false);
+
     const carregarCategoria = useCallback(async () => {
         try {
             setLoading(true);
             const id = params.id as string;
-            const categoria = await categoriasDocService.buscarCategoriaPorId(id);
+
+            const [categoria, leisData, orgaosData] = await Promise.all([
+                categoriasDocService.buscarCategoriaPorId(id),
+                leisNormativasService.listarAtivas(),
+                orgaosService.listar(),
+            ]);
+
+            setLeis(leisData);
+            setOrgaos(orgaosData);
 
             if (categoria) {
                 const data = {
                     nome: categoria.nome,
                     descricao: categoria.descricao || '',
-                    lei: categoria.lei || '',
+                    leiId: categoria.titulo?.lei_id || '',
+                    tituloNome: categoria.titulo?.nome || '',
+                    tituloId: categoria.titulo_id || '',
+                    ativo: categoria.ativo,
                 };
                 setFormData(data);
                 setOriginalData(data);
+
+                // Carregar órgãos vinculados
+                const orgaosIds = categoria.orgaos_vinculados?.map(ov => ov.orgao_id) || [];
+                setOrgaosSelecionados(orgaosIds);
+                setOrgaosOriginal(orgaosIds);
+                setSelecionarTodosOrgaos(orgaosIds.length === orgaosData.length && orgaosData.length > 0);
             } else {
                 alert('Categoria não encontrada');
-                router.push('/cadastros/categorias-documentos');
+                router.push('/cadastros/normativos');
             }
         } catch (err) {
             console.error('Erro ao carregar categoria:', err);
             alert('Erro ao carregar categoria. Tente novamente.');
-            router.push('/cadastros/categorias-documentos');
+            router.push('/cadastros/normativos');
         } finally {
             setLoading(false);
         }
@@ -70,10 +105,30 @@ export default function EditarCategoriaPage() {
         carregarCategoria();
     }, [carregarCategoria]);
 
+    // Handle selecionar todos os órgãos  
+    useEffect(() => {
+        if (selecionarTodosOrgaos) {
+            setOrgaosSelecionados(orgaos.map(o => o.id));
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selecionarTodosOrgaos]);
+
+    const handleToggleOrgao = (orgaoId: string) => {
+        setOrgaosSelecionados(prev => {
+            const novos = prev.includes(orgaoId)
+                ? prev.filter(id => id !== orgaoId)
+                : [...prev, orgaoId];
+            setSelecionarTodosOrgaos(novos.length === orgaos.length);
+            return novos;
+        });
+    };
+
     const validar = (): boolean => {
         const novosErros: Record<string, string> = {};
         if (!formData.nome.trim()) novosErros.nome = 'Nome é obrigatório';
-        if (!formData.lei) novosErros.lei = 'Lei vinculada é obrigatória';
+        if (!formData.leiId) novosErros.leiId = 'Lei é obrigatória';
+        if (!formData.tituloNome.trim()) novosErros.tituloNome = 'Título é obrigatório';
+        if (orgaosSelecionados.length === 0) novosErros.orgaos = 'Selecione pelo menos um órgão';
         setErros(novosErros);
         return Object.keys(novosErros).length === 0;
     };
@@ -83,12 +138,26 @@ export default function EditarCategoriaPage() {
 
         try {
             setSaving(true);
-            await categoriasDocService.atualizarCategoria(params.id as string, {
+            const id = params.id as string;
+
+            // Buscar ou criar título
+            const titulo = await titulosNormativosService.buscarOuCriarPorNome(
+                formData.leiId,
+                formData.tituloNome.trim()
+            );
+
+            // Atualizar categoria
+            await categoriasDocService.atualizarCategoria(id, {
                 nome: formData.nome,
                 descricao: formData.descricao,
-                lei: formData.lei,
+                titulo_id: titulo.id,
+                ativo: formData.ativo,
             });
-            router.push('/cadastros/categorias-documentos');
+
+            // Atualizar órgãos vinculados
+            await categoriasDocService.atualizarOrgaosVinculados(id, orgaosSelecionados);
+
+            router.push('/cadastros/normativos');
         } catch (err) {
             console.error('Erro ao atualizar categoria:', err);
             alert('Erro ao atualizar categoria. Tente novamente.');
@@ -103,6 +172,7 @@ export default function EditarCategoriaPage() {
 
     const handleLimpar = () => {
         setFormData(originalData);
+        setOrgaosSelecionados(orgaosOriginal);
         setErros({});
     };
 
@@ -138,48 +208,180 @@ export default function EditarCategoriaPage() {
                 </CardHeader>
                 <CardContent>
                     <div className="grid gap-4">
+                        {/* Lei */}
                         <div className="space-y-2">
-                            <Label htmlFor="nome">
-                                Nome<span className="text-red-500 ml-1">*</span>
-                            </Label>
-                            <Input
-                                id="nome"
-                                value={formData.nome}
-                                onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                                placeholder="Ex: Licitações"
-                                className={erros.nome ? 'border-red-500' : ''}
-                            />
-                            {erros.nome && <p className="text-sm text-red-500">{erros.nome}</p>}
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label htmlFor="descricao">Descrição</Label>
-                            <Input
-                                id="descricao"
-                                value={formData.descricao}
-                                onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
-                                placeholder="Descrição da categoria"
-                            />
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>Lei Vinculada<span className="text-red-500 ml-1">*</span></Label>
+                            <TooltipProvider>
+                                <div className="flex items-center gap-1">
+                                    <Label>Lei <span className="text-red-500">*</span></Label>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>Selecione a lei normativa à qual a categoria será vinculada.</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </div>
+                            </TooltipProvider>
                             <Select
-                                value={formData.lei}
-                                onValueChange={(valor) => setFormData({ ...formData, lei: valor })}
+                                value={formData.leiId}
+                                onValueChange={(valor) => setFormData({ ...formData, leiId: valor })}
                             >
-                                <SelectTrigger className={erros.lei ? 'border-red-500' : ''}>
-                                    <SelectValue placeholder="Selecione a lei" />
+                                <SelectTrigger className={erros.leiId ? 'border-red-500' : ''}>
+                                    <SelectValue placeholder="Selecione a Lei" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {LEIS.map((lei) => (
-                                        <SelectItem key={lei} value={lei}>
-                                            {lei}
-                                        </SelectItem>
+                                    {leis.map((lei) => (
+                                        <SelectItem key={lei.id} value={lei.id}>{lei.nome}</SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
-                            {erros.lei && <p className="text-sm text-red-500">{erros.lei}</p>}
+                            {erros.leiId && <p className="text-sm text-red-500">{erros.leiId}</p>}
+                        </div>
+
+                        {/* Título */}
+                        <div className="space-y-2">
+                            <TooltipProvider>
+                                <div className="flex items-center gap-1">
+                                    <Label htmlFor="titulo">Nome do Título <span className="text-red-500">*</span></Label>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>Título que agrupa as categorias dentro da lei selecionada.</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </div>
+                            </TooltipProvider>
+                            <Input
+                                id="titulo"
+                                value={formData.tituloNome}
+                                onChange={(e) => setFormData({ ...formData, tituloNome: e.target.value })}
+                                placeholder="Ex: Dispensa"
+                                className={erros.tituloNome ? 'border-red-500' : ''}
+                            />
+                            {erros.tituloNome && <p className="text-sm text-red-500">{erros.tituloNome}</p>}
+                        </div>
+
+                        {/* Nome da Categoria */}
+                        <div className="space-y-2">
+                            <TooltipProvider>
+                                <div className="flex items-center gap-1">
+                                    <Label htmlFor="nome">Nome da Categoria <span className="text-red-500">*</span></Label>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>Nome da categoria de documentos. Ex: Pareceres Técnicos</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </div>
+                            </TooltipProvider>
+                            <Input
+                                id="nome"
+                                value={formData.nome}
+                                onChange={(e) => {
+                                    if (e.target.value.length <= 100) {
+                                        setFormData({ ...formData, nome: e.target.value });
+                                    }
+                                }}
+                                placeholder="Ex: Pareceres Técnicos"
+                                className={erros.nome ? 'border-red-500' : ''}
+                            />
+                            <div className="text-xs text-right text-muted-foreground">{formData.nome.length}/100 caracteres</div>
+                            {erros.nome && <p className="text-sm text-red-500">{erros.nome}</p>}
+                        </div>
+
+                        {/* Código do Órgão */}
+                        <div className="space-y-2">
+                            <TooltipProvider>
+                                <div className="flex items-center gap-2">
+                                    <div className="flex items-center gap-1">
+                                        <Label>Código do Órgão <span className="text-red-500">*</span></Label>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                                <p>Selecione os órgãos que terão acesso a esta categoria.</p>
+                                            </TooltipContent>
+                                        </Tooltip>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <Checkbox
+                                            id="todos-orgaos"
+                                            checked={selecionarTodosOrgaos}
+                                            onCheckedChange={(c) => {
+                                                const checked = !!c;
+                                                setSelecionarTodosOrgaos(checked);
+                                                if (!checked) setOrgaosSelecionados([]);
+                                            }}
+                                        />
+                                        <Label htmlFor="todos-orgaos" className="text-sm font-normal cursor-pointer">
+                                            Selecionar todos os Órgãos
+                                        </Label>
+                                    </div>
+                                </div>
+                            </TooltipProvider>
+
+                            <div className={cn(
+                                "border rounded-md max-h-[200px] overflow-y-auto",
+                                erros.orgaos ? 'border-red-500' : ''
+                            )}>
+                                {orgaos.length === 0 ? (
+                                    <div className="text-center py-4 text-sm text-muted-foreground">
+                                        Nenhum órgão encontrado.
+                                    </div>
+                                ) : (
+                                    orgaos.map((orgao) => (
+                                        <div
+                                            key={orgao.id}
+                                            className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 cursor-pointer border-b last:border-b-0"
+                                            onClick={() => handleToggleOrgao(orgao.id)}
+                                        >
+                                            <Checkbox
+                                                checked={orgaosSelecionados.includes(orgao.id)}
+                                                onCheckedChange={() => handleToggleOrgao(orgao.id)}
+                                            />
+                                            <span className="text-sm">
+                                                <span className="font-medium">{orgao.codigo}</span>
+                                                {' - '}
+                                                {orgao.nome}
+                                            </span>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                            {orgaosSelecionados.length > 0 && (
+                                <p className="text-xs text-muted-foreground">
+                                    {orgaosSelecionados.length} órgão(s) selecionado(s)
+                                </p>
+                            )}
+                            {erros.orgaos && <p className="text-sm text-red-500">{erros.orgaos}</p>}
+                        </div>
+
+                        {/* Categoria Ativa */}
+                        <div className="flex items-center gap-2 pt-2">
+                            <Checkbox
+                                id="ativo"
+                                checked={formData.ativo}
+                                onCheckedChange={(c) => setFormData({ ...formData, ativo: !!c })}
+                            />
+                            <TooltipProvider>
+                                <div className="flex items-center gap-1">
+                                    <Label htmlFor="ativo" className="font-medium cursor-pointer">Categoria Ativa</Label>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>Define se a categoria estará disponível para uso.</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </div>
+                            </TooltipProvider>
                         </div>
                     </div>
                 </CardContent>
@@ -195,4 +397,3 @@ export default function EditarCategoriaPage() {
         </div>
     );
 }
-

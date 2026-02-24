@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -26,9 +26,25 @@ import {
     Trash2,
     Pencil,
     FileText,
+    HelpCircle,
+    Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Separator } from '@/components/ui/separator';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+    leisNormativasService,
+    titulosNormativosService,
+    categoriasDocService,
+    orgaosService,
+    ILeiNormativaDB,
+    IOrgaoDB,
+} from '@/services/api';
+import { LeisCadastroDialog } from '@/components/normativos/LeisCadastroDialog';
 
 const steps = [
     { id: 1, label: '01 - Dados Gerais' },
@@ -39,16 +55,73 @@ const steps = [
 export default function NovoNormativoPage() {
     const router = useRouter();
     const [currentStep, setCurrentStep] = useState(1);
+    const [saving, setSaving] = useState(false);
 
-    // Form States
-    const [nome, setNome] = useState('');
-    const [unidadeGestora, setUnidadeGestora] = useState('');
-    const [lei, setLei] = useState('');
+    // Dados carregados
+    const [leis, setLeis] = useState<ILeiNormativaDB[]>([]);
+    const [orgaos, setOrgaos] = useState<IOrgaoDB[]>([]);
+    const [loadingData, setLoadingData] = useState(true);
+
+    // Form States - Step 1
+    const [leiId, setLeiId] = useState('');
+    const [nomeTitulo, setNomeTitulo] = useState('');
+    const [nomeCategoria, setNomeCategoria] = useState('');
+    const [orgaosSelecionados, setOrgaosSelecionados] = useState<string[]>([]);
+    const [selecionarTodosOrgaos, setSelecionarTodosOrgaos] = useState(false);
     const [ativo, setAtivo] = useState(true);
 
     // Subcategorias
     const [novaSubcategoria, setNovaSubcategoria] = useState('');
-    const [subcategorias, setSubcategorias] = useState<string[]>(['teste']);
+    const [subcategorias, setSubcategorias] = useState<string[]>([]);
+
+    // Erros
+    const [erros, setErros] = useState<Record<string, string>>({});
+
+    // Carregar dados ao montar o componente
+    const carregarDados = useCallback(async () => {
+        try {
+            setLoadingData(true);
+            const [leisData, orgaosData] = await Promise.all([
+                leisNormativasService.listarAtivas(),
+                orgaosService.listar(),
+            ]);
+            setLeis(leisData);
+            setOrgaos(orgaosData);
+        } catch (err) {
+            console.error('Erro ao carregar dados:', err);
+        } finally {
+            setLoadingData(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        carregarDados();
+    }, [carregarDados]);
+
+    // Handle selecionar todos os órgãos
+    useEffect(() => {
+        if (selecionarTodosOrgaos) {
+            setOrgaosSelecionados(orgaos.map(o => o.id));
+        } else {
+            // Só limpa se estava marcado antes e desmarcou
+            if (orgaosSelecionados.length === orgaos.length && orgaos.length > 0) {
+                setOrgaosSelecionados([]);
+            }
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selecionarTodosOrgaos]);
+
+    const handleToggleOrgao = (orgaoId: string) => {
+        setOrgaosSelecionados(prev => {
+            const novos = prev.includes(orgaoId)
+                ? prev.filter(id => id !== orgaoId)
+                : [...prev, orgaoId];
+
+            // Atualizar checkbox "selecionar todos"
+            setSelecionarTodosOrgaos(novos.length === orgaos.length);
+            return novos;
+        });
+    };
 
     const handleAddSubcategoria = () => {
         if (novaSubcategoria.trim()) {
@@ -61,23 +134,83 @@ export default function NovoNormativoPage() {
         setSubcategorias(subcategorias.filter((_, i) => i !== index));
     };
 
-    const handleSave = () => {
-        // Here we would save the data
-        router.push('/cadastros/normativos');
+    const validarStep1 = (): boolean => {
+        const novosErros: Record<string, string> = {};
+        if (!leiId) novosErros.leiId = 'Lei é obrigatória';
+        if (!nomeTitulo.trim()) novosErros.nomeTitulo = 'Nome do Título é obrigatório';
+        if (!nomeCategoria.trim()) novosErros.nomeCategoria = 'Nome da Categoria é obrigatório';
+        if (orgaosSelecionados.length === 0) novosErros.orgaos = 'Selecione pelo menos um órgão';
+        setErros(novosErros);
+        return Object.keys(novosErros).length === 0;
     };
+
+    const handleSave = async () => {
+        if (!validarStep1()) {
+            setCurrentStep(1);
+            return;
+        }
+
+        try {
+            setSaving(true);
+
+            // 1. Buscar ou criar o título
+            const titulo = await titulosNormativosService.buscarOuCriarPorNome(leiId, nomeTitulo.trim());
+
+            // 2. Criar a categoria
+            const categoria = await categoriasDocService.criarCategoria({
+                nome: nomeCategoria.trim(),
+                titulo_id: titulo.id,
+                ativo,
+            });
+
+            // 3. Vincular órgãos
+            await categoriasDocService.vincularOrgaos(categoria.id, orgaosSelecionados);
+
+            // 4. Criar subcategorias
+            for (const subNome of subcategorias) {
+                await categoriasDocService.criarSubcategoria({
+                    categoria_id: categoria.id,
+                    nome: subNome,
+                    ativo: true,
+                });
+            }
+
+            router.push('/cadastros/normativos');
+        } catch (err) {
+            console.error('Erro ao salvar:', err);
+            alert('Erro ao salvar a categoria. Tente novamente.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleLeisChanged = () => {
+        carregarDados();
+    };
+
+    if (loadingData) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div>
-                <Button variant="ghost" size="sm" asChild className="mb-2 -ml-2 text-muted-foreground">
-                    <Link href="/cadastros/normativos">
-                        <ArrowLeft className="mr-2 h-4 w-4" />
-                        Voltar
-                    </Link>
-                </Button>
-                <h1 className="text-2xl font-bold tracking-tight">Incluir Nova Categoria de Documento</h1>
-                <p className="text-muted-foreground">Preencha os dados da categoria</p>
+            <div className="flex items-center justify-between">
+                <div>
+                    <Button variant="ghost" size="sm" asChild className="mb-2 -ml-2 text-muted-foreground">
+                        <Link href="/cadastros/normativos">
+                            <ArrowLeft className="mr-2 h-4 w-4" />
+                            Voltar
+                        </Link>
+                    </Button>
+                    <h1 className="text-2xl font-bold tracking-tight">Incluir Nova Categoria de Documento</h1>
+                    <p className="text-muted-foreground">Preencha os dados da categoria</p>
+                </div>
+                <LeisCadastroDialog onLeisChanged={handleLeisChanged} />
             </div>
 
             {/* Wizard Steps */}
@@ -111,51 +244,174 @@ export default function NovoNormativoPage() {
                             </div>
 
                             <div className="space-y-4">
+                                {/* Lei */}
                                 <div className="space-y-2">
-                                    <Label htmlFor="nome">Nome da Categoria <span className="text-red-500">*</span></Label>
-                                    <Input
-                                        id="nome"
-                                        placeholder="Ex: Pareceres Técnicos"
-                                        value={nome}
-                                        onChange={(e) => setNome(e.target.value)}
-                                    />
-                                    <div className="text-xs text-right text-muted-foreground">0/100 caracteres</div>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label htmlFor="ug">Unidade Gestora <span className="text-red-500">*</span></Label>
-                                    <Select value={unidadeGestora} onValueChange={setUnidadeGestora}>
-                                        <SelectTrigger id="ug">
-                                            <SelectValue placeholder="Selecione a Unidade Gestora" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="planejamento">Secretaria de Planejamento</SelectItem>
-                                            <SelectItem value="administracao">Secretaria de Administração</SelectItem>
-                                            <SelectItem value="financas">Secretaria de Finanças</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label htmlFor="lei">Lei <span className="text-red-500">*</span></Label>
-                                    <Select value={lei} onValueChange={setLei}>
-                                        <SelectTrigger id="lei">
+                                    <TooltipProvider>
+                                        <div className="flex items-center gap-1">
+                                            <Label htmlFor="lei">Lei <span className="text-red-500">*</span></Label>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>Selecione a lei normativa à qual a categoria será vinculada.</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </div>
+                                    </TooltipProvider>
+                                    <Select value={leiId} onValueChange={(v) => { setLeiId(v); setErros(prev => ({ ...prev, leiId: '' })); }}>
+                                        <SelectTrigger id="lei" className={erros.leiId ? 'border-red-500' : ''}>
                                             <SelectValue placeholder="Selecione a Lei" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="14133">Lei 14.133/2021</SelectItem>
-                                            <SelectItem value="8666">Lei 8.666/93</SelectItem>
+                                            {leis.map((lei) => (
+                                                <SelectItem key={lei.id} value={lei.id}>{lei.nome}</SelectItem>
+                                            ))}
                                         </SelectContent>
                                     </Select>
+                                    {erros.leiId && <p className="text-sm text-red-500">{erros.leiId}</p>}
                                 </div>
 
+                                {/* Nome do Título */}
+                                <div className="space-y-2">
+                                    <TooltipProvider>
+                                        <div className="flex items-center gap-1">
+                                            <Label htmlFor="titulo">Nome do Título <span className="text-red-500">*</span></Label>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>Título que agrupa as categorias dentro da lei selecionada. Ex: Dispensa</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </div>
+                                    </TooltipProvider>
+                                    <Input
+                                        id="titulo"
+                                        placeholder="Ex: Dispensa"
+                                        value={nomeTitulo}
+                                        onChange={(e) => { setNomeTitulo(e.target.value); setErros(prev => ({ ...prev, nomeTitulo: '' })); }}
+                                        className={erros.nomeTitulo ? 'border-red-500' : ''}
+                                    />
+                                    {erros.nomeTitulo && <p className="text-sm text-red-500">{erros.nomeTitulo}</p>}
+                                </div>
+
+                                {/* Nome da Categoria */}
+                                <div className="space-y-2">
+                                    <TooltipProvider>
+                                        <div className="flex items-center gap-1">
+                                            <Label htmlFor="categoria">Nome da Categoria <span className="text-red-500">*</span></Label>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>Nome da categoria de documentos. Ex: Pareceres Técnicos</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </div>
+                                    </TooltipProvider>
+                                    <Input
+                                        id="categoria"
+                                        placeholder="Ex: Pareceres Técnicos"
+                                        value={nomeCategoria}
+                                        onChange={(e) => {
+                                            if (e.target.value.length <= 100) {
+                                                setNomeCategoria(e.target.value);
+                                                setErros(prev => ({ ...prev, nomeCategoria: '' }));
+                                            }
+                                        }}
+                                        className={erros.nomeCategoria ? 'border-red-500' : ''}
+                                    />
+                                    <div className="text-xs text-right text-muted-foreground">{nomeCategoria.length}/100 caracteres</div>
+                                    {erros.nomeCategoria && <p className="text-sm text-red-500">{erros.nomeCategoria}</p>}
+                                </div>
+
+                                {/* Código do Órgão */}
+                                <div className="space-y-2">
+                                    <TooltipProvider>
+                                        <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Código do Órgão <span className="text-red-500">*</span></Label>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <p>Selecione os órgãos que terão acesso a esta categoria. Ao selecionar um órgão, todas as UGs vinculadas são incluídas automaticamente.</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </div>
+                                            <div className="flex items-center gap-1.5">
+                                                <Checkbox
+                                                    id="todos-orgaos"
+                                                    checked={selecionarTodosOrgaos}
+                                                    onCheckedChange={(c) => setSelecionarTodosOrgaos(!!c)}
+                                                />
+                                                <Label htmlFor="todos-orgaos" className="text-sm font-normal cursor-pointer">
+                                                    Selecionar todos os Órgãos
+                                                </Label>
+                                            </div>
+                                        </div>
+                                    </TooltipProvider>
+
+                                    <div className={cn(
+                                        "border rounded-md max-h-[200px] overflow-y-auto",
+                                        erros.orgaos ? 'border-red-500' : ''
+                                    )}>
+                                        {orgaos.length === 0 ? (
+                                            <div className="text-center py-4 text-sm text-muted-foreground">
+                                                Nenhum órgão encontrado.
+                                            </div>
+                                        ) : (
+                                            orgaos.map((orgao) => (
+                                                <div
+                                                    key={orgao.id}
+                                                    className="flex items-center gap-2 px-3 py-2 hover:bg-muted/50 cursor-pointer border-b last:border-b-0"
+                                                    onClick={() => handleToggleOrgao(orgao.id)}
+                                                >
+                                                    <Checkbox
+                                                        checked={orgaosSelecionados.includes(orgao.id)}
+                                                        onCheckedChange={() => handleToggleOrgao(orgao.id)}
+                                                    />
+                                                    <span className="text-sm">
+                                                        <span className="font-medium">{orgao.codigo}</span>
+                                                        {' - '}
+                                                        {orgao.nome}
+                                                    </span>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                    {orgaosSelecionados.length > 0 && (
+                                        <p className="text-xs text-muted-foreground">
+                                            {orgaosSelecionados.length} órgão(s) selecionado(s)
+                                        </p>
+                                    )}
+                                    {erros.orgaos && <p className="text-sm text-red-500">{erros.orgaos}</p>}
+                                </div>
+
+                                {/* Categoria Ativa */}
                                 <div className="flex items-center gap-2 pt-2">
                                     <Checkbox
                                         id="ativo"
                                         checked={ativo}
                                         onCheckedChange={(c) => setAtivo(!!c)}
                                     />
-                                    <Label htmlFor="ativo" className="font-medium cursor-pointer">Categoria Ativa</Label>
+                                    <TooltipProvider>
+                                        <div className="flex items-center gap-1">
+                                            <Label htmlFor="ativo" className="font-medium cursor-pointer">Categoria Ativa</Label>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>Define se a categoria estará disponível para uso.</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </div>
+                                    </TooltipProvider>
                                 </div>
                             </div>
                         </div>
@@ -198,9 +454,6 @@ export default function NovoNormativoPage() {
                                                 <div key={index} className="flex items-center justify-between p-3 bg-card border rounded-md shadow-sm">
                                                     <span className="text-sm font-medium">{index + 1}. {sub}</span>
                                                     <div className="flex items-center gap-1">
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary">
-                                                            <Pencil className="h-4 w-4" />
-                                                        </Button>
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
@@ -256,12 +509,12 @@ export default function NovoNormativoPage() {
 
                                 <div className="space-y-2">
                                     <Label>Categoria <span className="text-red-500">*</span></Label>
-                                    <Select disabled value={nome ? 'current' : ''}>
+                                    <Select disabled value={nomeCategoria ? 'current' : ''}>
                                         <SelectTrigger className="bg-muted">
-                                            <SelectValue placeholder={nome || "Categoria atual"} />
+                                            <SelectValue placeholder={nomeCategoria || "Categoria atual"} />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="current">{nome || "Categoria Atual"}</SelectItem>
+                                            <SelectItem value="current">{nomeCategoria || "Categoria Atual"}</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -311,8 +564,16 @@ export default function NovoNormativoPage() {
                         Cancelar
                     </Button>
                 </Link>
-                <Button className="gap-2 bg-primary hover:opacity-90 text-primary-foreground px-6 shadow-lg" onClick={handleSave}>
-                    <Check className="h-4 w-4" />
+                <Button
+                    className="gap-2 bg-primary hover:opacity-90 text-primary-foreground px-6 shadow-lg"
+                    onClick={handleSave}
+                    disabled={saving}
+                >
+                    {saving ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                        <Check className="h-4 w-4" />
+                    )}
                     Salvar
                 </Button>
             </div>
