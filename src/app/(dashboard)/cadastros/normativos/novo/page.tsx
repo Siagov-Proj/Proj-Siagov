@@ -546,6 +546,18 @@ export default function NovoNormativoPage() {
                                     className="min-h-[100px]"
                                 />
                             </div>
+
+                            <div className="space-y-2">
+                                <Label>Upload de Documento <span className="text-red-500">*</span></Label>
+                                <Input 
+                                    type="file" 
+                                    accept=".pdf,.doc,.docx,.xls,.xlsx" 
+                                    className="cursor-pointer"
+                                />
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Formatos permitidos: PDF, DOC, DOCX, XLS, XLSX (Máx. 10MB)
+                                </p>
+                            </div>
                         </div>
                     )}
 

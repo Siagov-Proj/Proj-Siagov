@@ -21,8 +21,9 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { ArrowLeft, FolderOpen, Loader2, HelpCircle } from 'lucide-react';
+import { ArrowLeft, FolderOpen, Loader2, HelpCircle, FilePlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
 import {
     categoriasDocService,
     leisNormativasService,
@@ -31,6 +32,7 @@ import {
     ILeiNormativaDB,
     IOrgaoDB,
 } from '@/services/api';
+import { SubcategoriasCadastroDialog } from '@/components/normativos/SubcategoriasCadastroDialog';
 
 const formVazio = {
     nome: '',
@@ -382,6 +384,46 @@ export default function EditarCategoriaPage() {
                                     </Tooltip>
                                 </div>
                             </TooltipProvider>
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            {/* Nova Seção: Subcategorias e Documentos */}
+            <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <div>
+                        <CardTitle>Subcategorias e Documentos</CardTitle>
+                        <CardDescription>Gerencie as subcategorias e crie novos documentos vinculados à esta categoria.</CardDescription>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex flex-col sm:flex-row gap-4 pt-4 border-t">
+                        <div className="flex-1 space-y-2">
+                            <h4 className="text-sm font-semibold">Subcategorias</h4>
+                            <p className="text-sm text-muted-foreground">
+                                Use o botão ao lado para gerenciar (adicionar, editar ou remover) as subcategorias vinculadas a esta categoria.
+                            </p>
+                        </div>
+                        <div className="flex items-center">
+                            <SubcategoriasCadastroDialog categoriaId={params.id as string} />
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-4 pt-6 mt-6 border-t">
+                        <div className="flex-1 space-y-2">
+                            <h4 className="text-sm font-semibold">Documentos</h4>
+                            <p className="text-sm text-muted-foreground">
+                                Você pode criar novos documentos vinculados diretamente a esta categoria. Todo o gerenciamento da versão final dos documentos é feito na raiz do módulo de Documentos.
+                            </p>
+                        </div>
+                        <div className="flex items-center">
+                            <Button size="sm" className="gap-2 bg-blue-600 hover:bg-blue-700" asChild>
+                                <Link href={`/documentos/novo?categoriaId=${params.id as string}`}>
+                                    <FilePlus className="h-4 w-4" />
+                                    Criar Documento
+                                </Link>
+                            </Button>
                         </div>
                     </div>
                 </CardContent>

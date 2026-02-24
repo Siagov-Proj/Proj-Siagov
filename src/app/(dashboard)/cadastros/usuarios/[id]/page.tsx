@@ -436,9 +436,14 @@ export default function EditarUsuarioPage() {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="Efetivo">Efetivo</SelectItem>
-                                        <SelectItem value="Comissionado">Comissionado</SelectItem>
-                                        <SelectItem value="Terceirizado">Terceirizado</SelectItem>
+                                        <SelectItem value="Efetivo-Comissionado">Efetivo-Comissionado</SelectItem>
+                                        <SelectItem value="CLT">CLT</SelectItem>
                                         <SelectItem value="Estagiário">Estagiário</SelectItem>
+                                        <SelectItem value="Requisitado">Requisitado</SelectItem>
+                                        <SelectItem value="Contrato Emergencial">Contrato Emergencial</SelectItem>
+                                        <SelectItem value="Prestador de Apoio">Prestador de Apoio</SelectItem>
+                                        <SelectItem value="Cargo Eletivo">Cargo Eletivo</SelectItem>
+                                        <SelectItem value="Outros">Outros</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>

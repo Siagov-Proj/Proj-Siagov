@@ -144,7 +144,7 @@ export function VincularDocumentoModal({
             <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <Link2 className="h-5 w-5" />
+                        <Link2 className="h-5 w-7" />
                         Vincular Documento
                     </DialogTitle>
                     <DialogDescription>

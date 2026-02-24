@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -72,8 +72,15 @@ const formDataVazio = {
 
 export default function NovoDocumentoPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const categoriaIdParam = searchParams.get('categoriaId');
+    const returnPath = categoriaIdParam ? `/cadastros/categorias-documentos/${categoriaIdParam}` : '/documentos';
+
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const [formData, setFormData] = useState(formDataVazio);
+    const [formData, setFormData] = useState({
+        ...formDataVazio,
+        categoriaId: categoriaIdParam || '',
+    });
     const [anexos, setAnexos] = useState<Anexo[]>([]);
     const [erros, setErros] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(false);
@@ -181,7 +188,7 @@ export default function NovoDocumentoPage() {
             // Note: Attachments would need a separate upload service call here (e.g. Storage)
             // Implementation skipped for brevity as storage setup wasn't requested strictly.
 
-            router.push('/documentos');
+            router.push(returnPath);
         } catch (error) {
             console.error('Erro ao salvar documento:', error);
             alert('Erro ao salvar documento. Verifique o console.');
@@ -217,7 +224,7 @@ export default function NovoDocumentoPage() {
             });
 
             alert('Documento enviado para geração! Você será encaminhado para a lista.');
-            router.push('/documentos');
+            router.push(returnPath);
         } catch (error) {
             console.error('Erro ao enviar para geração:', error);
             alert('Erro ao gerar documento.');
@@ -231,7 +238,7 @@ export default function NovoDocumentoPage() {
             {/* Header */}
             <div className="flex items-center gap-4">
                 <Button variant="ghost" size="icon" asChild>
-                    <Link href="/documentos">
+                    <Link href={returnPath}>
                         <ArrowLeft className="h-5 w-5" />
                     </Link>
                 </Button>
@@ -553,7 +560,7 @@ export default function NovoDocumentoPage() {
                     Limpar Formulário
                 </Button>
                 <div className="flex items-center gap-3">
-                    <Button variant="outline" onClick={() => router.push('/documentos')}>
+                    <Button variant="outline" onClick={() => router.push(returnPath)}>
                         Cancelar
                     </Button>
                     <Button onClick={salvar} disabled={loading}>
