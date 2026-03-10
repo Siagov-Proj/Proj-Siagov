@@ -39,6 +39,7 @@ const emptyFormData = {
     grupoIndireta: undefined as IUnidadeGestora['grupoIndireta'] | undefined,
     normativaCriacao: '',
     numeroDiarioOficial: '',
+    dataPublicacao: '',
     ordenadorDespesa: '',
     emailPrimario: '',
     emailSecundario: '',
@@ -159,6 +160,7 @@ export default function NovaUnidadePage() {
                 grupo_indireta: formData.grupoIndireta,
                 normativa_criacao: formData.normativaCriacao,
                 numero_diario_oficial: formData.numeroDiarioOficial,
+                data_publicacao: formData.dataPublicacao || undefined,
                 ordenador_despesa: formData.ordenadorDespesa,
                 email_primario: formData.emailPrimario,
                 email_secundario: formData.emailSecundario,
@@ -391,6 +393,39 @@ export default function NovaUnidadePage() {
                                     {errors.grupoIndireta && <p className="text-sm text-red-500">{errors.grupoIndireta}</p>}
                                 </div>
                             )}
+                        </div>
+
+                        {/* Normativas */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="normativaCriacao">Normativa de Criação</Label>
+                                <Input
+                                    id="normativaCriacao"
+                                    value={formData.normativaCriacao}
+                                    onChange={(e) => setFormData({ ...formData, normativaCriacao: e.target.value })}
+                                    maxLength={50}
+                                    placeholder="Ex: Lei 123/2020"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="numeroDiarioOficial">Nº do Diário Oficial</Label>
+                                <Input
+                                    id="numeroDiarioOficial"
+                                    value={formData.numeroDiarioOficial}
+                                    onChange={(e) => setFormData({ ...formData, numeroDiarioOficial: e.target.value })}
+                                    maxLength={20}
+                                    placeholder="Ex: 54321"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="dataPublicacao">Data de Publicação</Label>
+                                <Input
+                                    id="dataPublicacao"
+                                    type="date"
+                                    value={formData.dataPublicacao}
+                                    onChange={(e) => setFormData({ ...formData, dataPublicacao: e.target.value })}
+                                />
+                            </div>
                         </div>
 
                         {/* CNPJ e Ordenador */}

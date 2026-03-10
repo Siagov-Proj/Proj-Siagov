@@ -17,12 +17,12 @@ export interface IDocumentoDB {
     versao: number;
     status: string;
     criado_por?: string;
-    active?: boolean; // Schemaless or different name
+    active?: boolean;
     created_at: string;
     updated_at: string;
     // Relations
     categoria?: { nome: string; lei?: string };
-    subcategoria?: { nome: string };
+    subcategoria?: { nome: string; codigo?: string };
     processo?: { numero: string };
     anexos?: IDocumentoAnexoDB[];
     historico?: IDocumentoHistoricoDB[];
@@ -43,7 +43,9 @@ export interface IDocumentoHistoricoDB {
     id: string;
     documento_id: string;
     acao: string;
+    usuario_id?: string;
     usuario_nome?: string;
+    detalhes?: string;
     created_at: string;
 }
 
@@ -59,15 +61,75 @@ export interface IDocumentoVersaoDB {
 
 const TABLE_NAME = 'documentos';
 
+/**
+ * Extrai o prefixo numérico de um nome de subcategoria.
+ * Ex: "4.1. Dispensa" -> "4.1"
+ * Ex: "2. Estimativa de preços" -> "2"
+ */
+function extrairPrefixoSubcategoria(nome: string): string | null {
+    const match = nome.match(/^(\d+(?:\.\d+)*)\./);
+    return match ? match[1] : null;
+}
+
 export const documentosService = {
+
+    /**
+     * Gera o próximo código de documento para uma subcategoria.
+     * Ex: subcategoria "4.1. Dispensa" com 2 docs existentes -> retorna "4.1.3."
+     */
+    async gerarProximoCodigo(subcategoriaId: string): Promise<string> {
+        const supabase = getSupabaseClient();
+
+        // 1. Buscar nome da subcategoria (com campo codigo se disponível)
+        const { data: subcat, error: subcatError } = await supabase
+            .from('subcategorias_documentos')
+            .select('nome, codigo')
+            .eq('id', subcategoriaId)
+            .single();
+
+        if (subcatError || !subcat) {
+            // Fallback: gerar número sequencial simples
+            const fallbackSeq = Date.now().toString().slice(-4);
+            return `DOC-${fallbackSeq}`;
+        }
+
+        // 2. Extrair o prefixo da subcategoria (ex: "4.1" de "4.1. Nome")
+        const prefixo = subcat.codigo || extrairPrefixoSubcategoria(subcat.nome);
+
+        if (!prefixo) {
+            // Sem prefixo numérico, usar contagem simples
+            const { count } = await supabase
+                .from(TABLE_NAME)
+                .select('*', { count: 'exact', head: true })
+                .eq('subcategoria_id', subcategoriaId)
+                .eq('excluido', false);
+
+            const seq = (count || 0) + 1;
+            return `${seq}`;
+        }
+
+        // 3. Contar documentos existentes nessa subcategoria (excluídos não contam)
+        const { count, error: countError } = await supabase
+            .from(TABLE_NAME)
+            .select('*', { count: 'exact', head: true })
+            .eq('subcategoria_id', subcategoriaId)
+            .eq('excluido', false);
+
+        if (countError) {
+            console.error('Erro ao contar documentos da subcategoria:', countError);
+        }
+
+        const proximoNum = (count || 0) + 1;
+        return `${prefixo}.${proximoNum}.`;
+    },
+
     async listar(filtros?: { termo?: string; categoria?: string; status?: string }): Promise<IDocumentoDB[]> {
         const supabase = getSupabaseClient();
 
-        // Fetch raw documents
         let query = supabase
             .from(TABLE_NAME)
-            .select('*') // No joins allowed due to missing FKs
-            .eq('excluido', false) // Logical Delete Filter
+            .select('*')
+            .eq('excluido', false)
             .order('created_at', { ascending: false });
 
         if (filtros?.termo) {
@@ -81,12 +143,11 @@ export const documentosService = {
         if (error) throw error;
         if (!docs || docs.length === 0) return [];
 
-        // Manual Join: Collect IDs
+        // Manual Join
         const categoriaIds = [...new Set((docs as IDocumentoDB[]).map(d => d.categoria_id).filter(Boolean))];
         const subcategoriaIds = [...new Set((docs as IDocumentoDB[]).map(d => d.subcategoria_id).filter(Boolean))];
         const processoIds = [...new Set((docs as IDocumentoDB[]).map(d => d.processo_id).filter(Boolean))];
 
-        // Fetch Related Data
         let cats: any[] = [];
         let subs: any[] = [];
         let procs: any[] = [];
@@ -96,7 +157,7 @@ export const documentosService = {
             cats = data || [];
         }
         if (subcategoriaIds.length > 0) {
-            const { data } = await supabase.from('subcategorias_documentos').select('id, nome').in('id', subcategoriaIds);
+            const { data } = await supabase.from('subcategorias_documentos').select('id, nome, codigo').in('id', subcategoriaIds);
             subs = data || [];
         }
         if (processoIds.length > 0) {
@@ -104,7 +165,6 @@ export const documentosService = {
             procs = data || [];
         }
 
-        // Map back to docs
         const catsMap = new Map(cats.map(c => [c.id, c]));
         const subsMap = new Map(subs.map(s => [s.id, s]));
         const procsMap = new Map(procs.map(p => [p.id, p]));
@@ -120,7 +180,6 @@ export const documentosService = {
     async obterPorId(id: string): Promise<IDocumentoDB | null> {
         const supabase = getSupabaseClient();
 
-        // 1. Fetch Doc
         const { data: doc, error } = await supabase
             .from(TABLE_NAME)
             .select('*')
@@ -130,16 +189,14 @@ export const documentosService = {
         if (error) throw error;
         if (!doc) return null;
 
-        // 2. Fetch Relations Manually
-        const promises = [
+        const promises: Promise<any>[] = [
             supabase.from('documento_anexos').select('*').eq('documento_id', id),
             supabase.from('documento_historico').select('*').eq('documento_id', id).order('created_at', { ascending: false }),
             supabase.from('documento_versoes').select('*').eq('documento_id', id).order('versao', { ascending: false })
         ];
 
-        // Conditional fetches for relations
-        if (doc.categoria_id) promises.push(supabase.from('categorias_documentos').select('nome, lei').eq('id', doc.categoria_id).single());
-        if (doc.subcategoria_id) promises.push(supabase.from('subcategorias_documentos').select('nome').eq('id', doc.subcategoria_id).single());
+        if (doc.categoria_id) promises.push(supabase.from('categorias_documentos').select('nome, lei, codigo').eq('id', doc.categoria_id).single());
+        if (doc.subcategoria_id) promises.push(supabase.from('subcategorias_documentos').select('nome, codigo').eq('id', doc.subcategoria_id).single());
         if (doc.processo_id) promises.push(supabase.from('processos').select('numero').eq('id', doc.processo_id).single());
 
         const results = await Promise.all(promises);
@@ -148,7 +205,6 @@ export const documentosService = {
         const historico = results[1].data || [];
         const versoes = results[2].data || [];
 
-        // Extract optional results based on index offset
         let offset = 3;
         const categoria = doc.categoria_id ? results[offset++]?.data : undefined;
         const subcategoria = doc.subcategoria_id ? results[offset++]?.data : undefined;
@@ -168,17 +224,19 @@ export const documentosService = {
     async criar(dados: Partial<IDocumentoDB>): Promise<IDocumentoDB> {
         const supabase = getSupabaseClient();
 
-        // Ensure numero exists (simple generation)
         const payload = { ...dados };
-        if (!payload.numero) {
+
+        // Se subcategoria_id estiver presente, gerar o código automaticamente
+        if (!payload.numero && payload.subcategoria_id) {
+            payload.numero = await this.gerarProximoCodigo(payload.subcategoria_id);
+        } else if (!payload.numero) {
             const now = new Date();
             const year = now.getFullYear();
             const sequence = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-            payload.numero = `${year}/${sequence}`; // Format: 2025/1234
+            payload.numero = `${year}/${sequence}`;
         }
 
-        // Clean payload of unsupported fields (TEMPORARY: until DB fixed for these)
-        // We KEEP ativo/excluido now as we expect them to be fixed
+        // Limpar campos que não existem no schema da tabela
         delete (payload as any).objetivo;
         delete (payload as any).contexto;
         delete (payload as any).conteudo;
@@ -187,17 +245,30 @@ export const documentosService = {
         delete (payload as any).versao;
         delete (payload as any).lei;
 
-        // Force defaults
         (payload as any).ativo = true;
         (payload as any).excluido = false;
 
         const { data, error } = await supabase
             .from(TABLE_NAME)
             .insert(payload)
-            .select() // Returning * is fine usually
+            .select()
             .single();
 
         if (error) throw error;
+
+        // Registrar log de criação
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            await supabase.from('documento_historico').insert({
+                documento_id: data.id,
+                acao: 'Criado',
+                usuario_id: user?.id || null,
+                usuario_nome: user?.email || 'Sistema',
+            });
+        } catch (logError) {
+            console.warn('Aviso: Não foi possível registrar log de criação:', logError);
+        }
+
         return data;
     },
 
@@ -206,7 +277,7 @@ export const documentosService = {
 
         const payload = { ...dados };
 
-        // Clean payload of unsupported fields
+        // Limpar campos que não existem no schema
         delete (payload as any).objetivo;
         delete (payload as any).contexto;
         delete (payload as any).conteudo;
@@ -223,12 +294,49 @@ export const documentosService = {
             .single();
 
         if (error) throw error;
+
+        // Registrar log de atualização
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            await supabase.from('documento_historico').insert({
+                documento_id: id,
+                acao: 'Atualizado',
+                usuario_id: user?.id || null,
+                usuario_nome: user?.email || 'Sistema',
+            });
+        } catch (logError) {
+            console.warn('Aviso: Não foi possível registrar log de atualização:', logError);
+        }
+
         return data;
+    },
+
+    /**
+     * Registra um download do documento no histórico.
+     * Deve ser chamado quando o usuário clica em "Baixar PDF".
+     */
+    async registrarDownload(documentoId: string): Promise<void> {
+        const supabase = getSupabaseClient();
+
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            const { error } = await supabase.from('documento_historico').insert({
+                documento_id: documentoId,
+                acao: 'Download',
+                usuario_id: user?.id || null,
+                usuario_nome: user?.email || 'Desconhecido',
+            });
+
+            if (error) {
+                console.error('Erro ao registrar download:', error);
+            }
+        } catch (err) {
+            console.error('Erro ao registrar download:', err);
+        }
     },
 
     async excluir(id: string): Promise<void> {
         const supabase = getSupabaseClient();
-        // Logical Delete - Soft Delete
         const { error } = await supabase
             .from(TABLE_NAME)
             .update({ excluido: true })

@@ -35,14 +35,36 @@ export interface IOrgao {
     nome: string;               // 80 caracteres
     sigla: string;              // 10 caracteres
     cnpj: string;               // 18 caracteres
-    codigoSiasg: string;        // 6 dígitos
-    ugTce: string;              // 5 caracteres
-    ugSiafemSigef: string;      // 6 dígitos
     nomeAnterior?: string;      // 80 caracteres
     nomeAbreviadoAnterior?: string; // 30 caracteres
     ativo: boolean;
     createdAt: Date;
     updatedAt: Date;
+}
+
+export interface IOrdenador {
+    id: string;
+    unidadeGestoraId: string;
+    codigoCredor: string;        // 10 characters
+    nome: string;                // 100 characters
+    tipo: string;
+    cargo?: string;              // 100 characters
+
+    // Nomeação
+    dataNomeacao?: Date | string;
+    atoNomeacao?: string;        // 50 characters
+    numeroDiarioOficialNomeacao?: string; // 20 characters
+    dataPublicacaoNomeacao?: Date | string;
+
+    // Exoneração
+    dataExoneracao?: Date | string;
+    atoExoneracao?: string;      // 50 characters
+    numeroDiarioOficialExoneracao?: string; // 20 characters
+    dataPublicacaoExoneracao?: Date | string;
+
+    ativo: boolean;
+    createdAt?: Date;
+    updatedAt?: Date;
 }
 
 export interface IUnidadeGestora {
@@ -60,10 +82,12 @@ export interface IUnidadeGestora {
     uf: string;                   // 2 caracteres
     municipio: string;            // 60 caracteres
     tipoAdministracao: 'Direta' | 'Indireta';
-    grupoIndireta?: 'Autarquia' | 'Fundação' | 'Empresa Pública' | 'Sociedade de Economia Mista';
+    grupoIndireta?: 'Autarquia' | 'Fundação' | 'Empresa Pública' | 'Sociedade de Economia Mista' | 'Regime Especial' | 'Hospital' | 'Fundo';
     normativaCriacao?: string;    // 50 caracteres
     numeroDiarioOficial?: string; // 20 caracteres
+    dataPublicacao?: Date | string; // Novo
     ordenadorDespesa?: string;    // 80 caracteres (Novo)
+    ordenadores?: IOrdenador[];   // Relacionamento 1:N com Ordenadores
     emailPrimario: string;        // 100 caracteres
     emailSecundario?: string;     // 100 caracteres
     telefone: string;             // 15 caracteres

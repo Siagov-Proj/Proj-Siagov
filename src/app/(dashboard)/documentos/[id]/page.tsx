@@ -37,24 +37,50 @@ import {
     History,
     FileDown,
     Zap,
-    Loader2
+    Loader2,
+    Shield,
+    RefreshCw,
+    PlusCircle
 } from 'lucide-react';
 import { formatDate, formatDateTimeBR } from '@/utils/formatters';
 
 // Services
 import { documentosService, IDocumentoDB } from '@/services/api/documentosService';
+import { getSupabaseClient } from '@/lib/supabase/client';
 
 export default function DetalheDocumentoPage() {
     const params = useParams();
     const router = useRouter();
     const [documento, setDocumento] = useState<IDocumentoDB | null>(null);
     const [loading, setLoading] = useState(true);
+    const [isAdmin, setIsAdmin] = useState(false);
 
     useEffect(() => {
         if (params.id) {
             loadDocumento(params.id as string);
         }
+        checkAdmin();
     }, [params.id]);
+
+    const checkAdmin = async () => {
+        try {
+            const supabase = getSupabaseClient();
+            const { data: { user } } = await supabase.auth.getUser();
+            // Verifica se o usuário tem role de admin ou metadado de administrador
+            if (user) {
+                const appMetadata = user.app_metadata;
+                const userMetadata = user.user_metadata;
+                const isAdminUser =
+                    appMetadata?.role === 'admin' ||
+                    appMetadata?.claims_admin === true ||
+                    userMetadata?.role === 'admin' ||
+                    user.email?.endsWith('@admin.siagov.gov.br');
+                setIsAdmin(!!isAdminUser);
+            }
+        } catch (err) {
+            console.warn('Não foi possível verificar permissões de admin:', err);
+        }
+    };
 
     const loadDocumento = async (id: string) => {
         try {
@@ -83,6 +109,15 @@ export default function DetalheDocumentoPage() {
 
     const exportarDocx = () => {
         alert('Exportação não implementada');
+    };
+
+    const baixarPDF = async () => {
+        if (!documento) return;
+        // Registrar o download no histórico
+        await documentosService.registrarDownload(documento.id);
+        // Recarregar o documento para atualizar o histórico na UI
+        loadDocumento(documento.id);
+        alert('Download iniciado! O registro foi salvo no histórico.');
     };
 
     if (loading) {
@@ -134,7 +169,7 @@ export default function DetalheDocumentoPage() {
                         <FileDown className="mr-2 h-4 w-4" />
                         Exportar DOCX
                     </Button>
-                    <Button>
+                    <Button onClick={baixarPDF}>
                         <Download className="mr-2 h-4 w-4" />
                         Baixar PDF
                     </Button>
@@ -404,31 +439,58 @@ export default function DetalheDocumentoPage() {
                     <Card>
                         <CardHeader>
                             <CardTitle>Histórico de Alterações</CardTitle>
-                            <CardDescription>Registro de todas as ações realizadas no documento</CardDescription>
+                            <CardDescription>
+                                Registro de todas as ações realizadas no documento
+                                {isAdmin && <span className="ml-2 text-xs text-primary">(Administrador: todos os logs visíveis)</span>}
+                            </CardDescription>
                         </CardHeader>
                         <CardContent>
                             <div className="relative">
                                 <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-border" />
                                 <div className="space-y-6">
                                     {documento.historico && documento.historico.length > 0 ? (
-                                        documento.historico.map((item) => (
-                                            <div key={item.id} className="relative pl-10">
-                                                <div className="absolute left-2 w-4 h-4 rounded-full bg-primary border-4 border-background" />
-                                                <div className="flex flex-col">
-                                                    <span className="font-medium">{item.acao}</span>
-                                                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                                                        <span className="flex items-center gap-1">
-                                                            <User className="h-3 w-3" />
-                                                            {item.usuario_nome || 'Sistema'}
-                                                        </span>
-                                                        <span className="flex items-center gap-1">
-                                                            <Clock className="h-3 w-3" />
-                                                            {formatDateTimeBR(new Date(item.created_at))}
-                                                        </span>
+                                        documento.historico
+                                            // Se não for admin, ocultar logs de 'Download'
+                                            .filter(item => isAdmin || item.acao !== 'Download')
+                                            .map((item) => {
+                                                const isDownload = item.acao === 'Download';
+                                                const isCriado = item.acao === 'Criado';
+                                                return (
+                                                    <div key={item.id} className="relative pl-10">
+                                                        <div className={`absolute left-2 w-4 h-4 rounded-full border-4 border-background ${isDownload ? 'bg-blue-500' :
+                                                            isCriado ? 'bg-green-500' :
+                                                                'bg-primary'
+                                                            }`} />
+                                                        <div className="flex flex-col">
+                                                            <div className="flex items-center gap-2">
+                                                                {isDownload && <Download className="h-3 w-3 text-blue-500" />}
+                                                                {isCriado && <PlusCircle className="h-3 w-3 text-green-500" />}
+                                                                {!isDownload && !isCriado && <RefreshCw className="h-3 w-3 text-primary" />}
+                                                                <span className="font-medium">{item.acao}</span>
+                                                                {isDownload && isAdmin && (
+                                                                    <Badge variant="secondary" className="text-xs px-1 py-0">
+                                                                        <Shield className="h-2 w-2 mr-1" />
+                                                                        Admin
+                                                                    </Badge>
+                                                                )}
+                                                            </div>
+                                                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                                                                <span className="flex items-center gap-1">
+                                                                    <User className="h-3 w-3" />
+                                                                    {item.usuario_nome || 'Sistema'}
+                                                                </span>
+                                                                <span className="flex items-center gap-1">
+                                                                    <Clock className="h-3 w-3" />
+                                                                    {formatDateTimeBR(new Date(item.created_at))}
+                                                                </span>
+                                                                {item.detalhes && (
+                                                                    <span className="text-xs italic">{item.detalhes}</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            </div>
-                                        ))
+                                                );
+                                            })
                                     ) : (
                                         <p className="text-muted-foreground pl-10">Nenhum histórico registrado.</p>
                                     )}

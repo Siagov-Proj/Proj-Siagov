@@ -23,6 +23,7 @@ export interface IUnidadeGestoraDB {
     grupo_indireta?: string;
     normativa_criacao?: string;
     numero_diario_oficial?: string;
+    data_publicacao?: string;
     ordenador_despesa?: string;
     email_primario?: string;
     email_secundario?: string;

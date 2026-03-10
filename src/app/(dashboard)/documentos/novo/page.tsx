@@ -167,12 +167,14 @@ export default function NovoDocumentoPage() {
 
         setLoading(true);
         try {
-            // Generate basic number on client for now
-            const numero = `${new Date().getFullYear()}-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
+            // Gerar o código automático baseado na subcategoria selecionada
+            const numero = formData.subcategoriaId
+                ? await documentosService.gerarProximoCodigo(formData.subcategoriaId)
+                : `${new Date().getFullYear()}/${String(Date.now()).slice(-4)}`;
 
             await documentosService.criar({
                 numero,
-                titulo: formData.titulo || `Documento sem Título - ${numero}`,
+                titulo: formData.titulo || `Documento ${numero}`,
                 tipo: formData.tipo,
                 categoria_id: formData.categoriaId,
                 subcategoria_id: formData.subcategoriaId,
@@ -184,9 +186,6 @@ export default function NovoDocumentoPage() {
                 versao: 1,
                 tokens_utilizados: 0
             });
-
-            // Note: Attachments would need a separate upload service call here (e.g. Storage)
-            // Implementation skipped for brevity as storage setup wasn't requested strictly.
 
             router.push(returnPath);
         } catch (error) {
@@ -202,11 +201,14 @@ export default function NovoDocumentoPage() {
 
         setGerando(true);
         try {
-            // Simula envio para geração com IA
-            await new Promise((resolve) => setTimeout(resolve, 2000));
+            // Gerar o código automático baseado na subcategoria
+            const numero = formData.subcategoriaId
+                ? await documentosService.gerarProximoCodigo(formData.subcategoriaId)
+                : `${new Date().getFullYear()}/${String(Date.now()).slice(-4)}`;
 
-            // Save as draft first
-            const numero = `${new Date().getFullYear()}-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
+            // Simula processamento pela IA
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+
             await documentosService.criar({
                 numero,
                 titulo: formData.titulo || `Documento Gerado - ${numero}`,
@@ -217,7 +219,7 @@ export default function NovoDocumentoPage() {
                 especialista_id: formData.especialistaId,
                 objetivo: formData.objetivo,
                 contexto: formData.contexto,
-                status: 'Em Revisão', // Changed status
+                status: 'Em Revisão',
                 conteudo: '# Documento Gerado pela IA\n\nConteúdo simulado...',
                 versao: 1,
                 tokens_utilizados: 150

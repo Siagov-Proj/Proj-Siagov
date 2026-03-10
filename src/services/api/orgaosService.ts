@@ -13,9 +13,6 @@ export interface IOrgaoDB {
     nome: string;
     sigla?: string;
     cnpj?: string;
-    codigo_siasg?: string;
-    ug_tce?: string;
-    ug_siafem_sigef?: string;
     nome_anterior?: string;
     nome_abreviado_anterior?: string;
     ativo: boolean;

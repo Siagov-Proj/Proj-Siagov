@@ -41,8 +41,12 @@ import {
     titulosNormativosService,
     categoriasDocService,
     orgaosService,
+    unidadesService,
+    setoresService,
     ILeiNormativaDB,
     IOrgaoDB,
+    IUnidadeGestoraDB,
+    ISetorDB,
 } from '@/services/api';
 import { LeisCadastroDialog } from '@/components/normativos/LeisCadastroDialog';
 
@@ -60,6 +64,8 @@ export default function NovoNormativoPage() {
     // Dados carregados
     const [leis, setLeis] = useState<ILeiNormativaDB[]>([]);
     const [orgaos, setOrgaos] = useState<IOrgaoDB[]>([]);
+    const [unidadesGestoras, setUnidadesGestoras] = useState<IUnidadeGestoraDB[]>([]);
+    const [setores, setSetores] = useState<ISetorDB[]>([]);
     const [loadingData, setLoadingData] = useState(true);
 
     // Form States - Step 1
@@ -73,6 +79,11 @@ export default function NovoNormativoPage() {
     // Subcategorias
     const [novaSubcategoria, setNovaSubcategoria] = useState('');
     const [subcategorias, setSubcategorias] = useState<string[]>([]);
+
+    // Documentos (Step 3)
+    const [subcategoriaSelecionada, setSubcategoriaSelecionada] = useState('');
+    const [unidadeGestoraId, setUnidadeGestoraId] = useState('');
+    const [setorId, setSetorId] = useState('');
 
     // Erros
     const [erros, setErros] = useState<Record<string, string>>({});
@@ -110,6 +121,65 @@ export default function NovoNormativoPage() {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selecionarTodosOrgaos]);
+
+    // Carregar Unidades Gestoras quando os órgãos mudam
+    useEffect(() => {
+        let isMounted = true;
+        async function fetchUnidades() {
+            if (orgaosSelecionados.length > 0) {
+                try {
+                    const promises = orgaosSelecionados.map(orgaoId =>
+                        unidadesService.listarPorOrgao(orgaoId)
+                    );
+                    const results = await Promise.all(promises);
+                    if (isMounted) {
+                        const combined = results.flat();
+                        // Remover duplicados baseados no id, caso os órgãos retornem a mesma UG
+                        const unique = Array.from(new Map(combined.map(item => [item.id, item])).values());
+                        setUnidadesGestoras(unique);
+                    }
+                } catch (error) {
+                    console.error('Erro ao buscar unidades gestoras:', error);
+                }
+            } else {
+                if (isMounted) {
+                    setUnidadesGestoras([]);
+                }
+            }
+            if (isMounted) {
+                setUnidadeGestoraId('');
+                setSetorId('');
+            }
+        }
+        fetchUnidades();
+        return () => { isMounted = false; };
+    }, [orgaosSelecionados]);
+
+    // Carregar Setores quando a Unidade Gestora muda
+    useEffect(() => {
+        let isMounted = true;
+        async function fetchSetores() {
+            if (unidadeGestoraId) {
+                try {
+                    const setoresData = await setoresService.listarPorUnidadeGestora(unidadeGestoraId);
+                    if (isMounted) {
+                        setSetores(setoresData);
+                    }
+                } catch (error) {
+                    console.error('Erro ao buscar setores:', error);
+                }
+            } else {
+                if (isMounted) {
+                    setSetores([]);
+                }
+            }
+            if (isMounted) {
+                setSetorId('');
+            }
+        }
+        fetchSetores();
+        return () => { isMounted = false; };
+    }, [unidadeGestoraId]);
 
     const handleToggleOrgao = (orgaoId: string) => {
         setOrgaosSelecionados(prev => {
@@ -482,6 +552,72 @@ export default function NovoNormativoPage() {
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="space-y-2">
+                                    <Label>Categoria <span className="text-red-500">*</span></Label>
+                                    <Select disabled value={nomeCategoria ? 'current' : ''}>
+                                        <SelectTrigger className="bg-muted">
+                                            <SelectValue placeholder={nomeCategoria || "Categoria atual"} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="current">{nomeCategoria || "Categoria Atual"}</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label>Subcategoria <span className="text-red-500">*</span></Label>
+                                    <Select value={subcategoriaSelecionada} onValueChange={setSubcategoriaSelecionada}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Selecione a subcategoria" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {subcategorias.length === 0 ? (
+                                                <SelectItem value="none" disabled>Nenhuma subcategoria</SelectItem>
+                                            ) : (
+                                                subcategorias.map((sub, i) => (
+                                                    <SelectItem key={i} value={sub}>{sub}</SelectItem>
+                                                ))
+                                            )}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label>Unidade Gestora <span className="text-red-500">*</span></Label>
+                                    <Select value={unidadeGestoraId} onValueChange={setUnidadeGestoraId}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Selecione a unidade gestora" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {unidadesGestoras.length === 0 ? (
+                                                <SelectItem value="none" disabled>Nenhuma unidade encontrada</SelectItem>
+                                            ) : (
+                                                unidadesGestoras.map((ug) => (
+                                                    <SelectItem key={ug.id} value={ug.id}>{ug.nome}</SelectItem>
+                                                ))
+                                            )}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label>Setor <span className="text-red-500">*</span></Label>
+                                    <Select value={setorId} onValueChange={setSetorId} disabled={!unidadeGestoraId}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Selecione o setor" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {setores.length === 0 ? (
+                                                <SelectItem value="none" disabled>Nenhum setor encontrado</SelectItem>
+                                            ) : (
+                                                setores.map((setor) => (
+                                                    <SelectItem key={setor.id} value={setor.id}>{setor.nome}</SelectItem>
+                                                ))
+                                            )}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="space-y-2">
                                     <Label>Tipo de Documento <span className="text-red-500">*</span></Label>
                                     <Select>
                                         <SelectTrigger>
@@ -506,32 +642,6 @@ export default function NovoNormativoPage() {
                                         </SelectContent>
                                     </Select>
                                 </div>
-
-                                <div className="space-y-2">
-                                    <Label>Categoria <span className="text-red-500">*</span></Label>
-                                    <Select disabled value={nomeCategoria ? 'current' : ''}>
-                                        <SelectTrigger className="bg-muted">
-                                            <SelectValue placeholder={nomeCategoria || "Categoria atual"} />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="current">{nomeCategoria || "Categoria Atual"}</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label>Subcategoria <span className="text-red-500">*</span></Label>
-                                    <Select>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Selecione a subcategoria" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {subcategorias.map((sub, i) => (
-                                                <SelectItem key={i} value={sub}>{sub}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
                             </div>
 
                             <div className="space-y-2">
@@ -549,9 +659,9 @@ export default function NovoNormativoPage() {
 
                             <div className="space-y-2">
                                 <Label>Upload de Documento <span className="text-red-500">*</span></Label>
-                                <Input 
-                                    type="file" 
-                                    accept=".pdf,.doc,.docx,.xls,.xlsx" 
+                                <Input
+                                    type="file"
+                                    accept=".pdf,.doc,.docx,.xls,.xlsx"
                                     className="cursor-pointer"
                                 />
                                 <p className="text-xs text-muted-foreground mt-1">

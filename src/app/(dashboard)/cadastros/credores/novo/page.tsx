@@ -22,7 +22,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ActionBar } from '@/components/ui/action-bar';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
-import { ArrowLeft, Wallet, User, Building, MapPin, CreditCard, FileText, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { maskCnpj, maskCpf, maskCep, maskTelefone, maskNitPisPasep, maskInscricaoEstadual } from '@/utils/masks';
 import { TIPOS_CREDOR, TIPOS_CONTA_BANCARIA, ESTADOS_BRASIL, FIELD_LIMITS } from '@/utils/constants';
 import type { ICredor } from '@/types';
@@ -30,32 +30,55 @@ import { credoresService } from '@/services/api/credoresService';
 import { bancosService, IBancoDB } from '@/services/api/bancosService';
 import { agenciasService, IAgenciaDB } from '@/services/api/agenciasService';
 
+// Opções de Cadastro RFB
+const CADASTRO_RFB_OPTIONS = [
+    { value: 'CPF', label: 'CPF' },
+    { value: 'CNPJ', label: 'CNPJ' },
+    { value: 'CEI', label: 'CEI' },
+    { value: 'CAEPF', label: 'CAEPF' },
+];
+
+// Opções de Situação Cadastral
+const SITUACAO_CADASTRAL_OPTIONS = [
+    { value: 'Ativa', label: 'Ativa' },
+    { value: 'Suspensa', label: 'Suspensa' },
+    { value: 'Inapta', label: 'Inapta' },
+    { value: 'Baixada', label: 'Baixada' },
+    { value: 'Nula', label: 'Nula' },
+];
+
+// Opções de Porte do Estabelecimento PJ
+const PORTE_ESTABELECIMENTO_OPTIONS = [
+    { value: 'MEI', label: 'MEI' },
+    { value: 'ME', label: 'Microempresa (ME)' },
+    { value: 'EPP', label: 'Empresa de Pequeno Porte (EPP)' },
+    { value: 'Medio', label: 'Empresa de Médio Porte' },
+    { value: 'Grande', label: 'Empresa de Grande Porte' },
+    { value: 'Demais', label: 'Demais' },
+];
+
+// Opções de Optante (Select)
+const OPTANTE_OPTIONS = [
+    { value: 'Sim', label: 'Sim' },
+    { value: 'Não', label: 'Não' },
+];
+
 const formDataVazio = {
     tipoCredor: '' as ICredor['tipoCredor'] | '',
+    cadastroRfb: '',
     identificador: '',
     nome: '',
     nomeFantasia: '',
-    naturezaJuridica: '',
-    optanteSimples: false,
-    dataFinalOpcaoSimples: '',
-    optanteCprb: false,
-    dataFinalOpcaoCprb: '',
-    cpfAdministrador: '',
-    nomeAdministrador: '',
     inscricaoEstadual: '',
     inscricaoMunicipal: '',
     nitPisPasep: '',
-    rg: '',
-    orgaoEmissorRg: '',
-    dataEmissaoRg: '',
-    email: '',
-    email2: '',
-    telefone: '',
-    telefoneComercial2: '',
-    telefoneResidencial: '',
-    celular: '',
-    fax: '',
-    site: '',
+    optanteSimples: '',
+    dataFinalOpcaoSimples: '',
+    optanteCprb: '',
+    dataFinalOpcaoCprb: '',
+    cpfAdministrador: '',
+    nomeAdministrador: '',
+    // Endereço
     cep: '',
     logradouro: '',
     numero: '',
@@ -65,19 +88,27 @@ const formDataVazio = {
     uf: '',
     caixaPostal: '',
     pontoReferencia: '',
+    // Contato
+    telefone: '',
+    telefoneComercial2: '',
+    telefoneResidencial: '',
+    celular: '',
+    email: '',
+    email2: '',
+    site: '',
+    // Bancários
     bancoId: '',
     agencia: '',
-    digitoAgencia: '',
     conta: '',
-    digitoConta: '',
     tipoConta: '' as ICredor['tipoContaBancaria'] | '',
-    chavePix: '',
-    tipoChavePix: '',
-    porteEstabelecimento: '',
-    dataAberturaCnpj: '',
+    // Complementares
     situacaoCadastral: '',
     dataSituacaoCadastral: '',
+    dataAberturaCnpj: '',
+    porteEstabelecimento: '',
     observacoes: '',
+    inativo: false,
+    bloqueado: false,
 };
 
 export default function NovoCredorPage() {
@@ -87,21 +118,11 @@ export default function NovoCredorPage() {
     const [abaAtiva, setAbaAtiva] = useState('identificacao');
     const [saving, setSaving] = useState(false);
     const [bancos, setBancos] = useState<IBancoDB[]>([]);
-    const [agencias, setAgencias] = useState<IAgenciaDB[]>([]);
     const [loadingBancos, setLoadingBancos] = useState(true);
-    const [loadingAgencias, setLoadingAgencias] = useState(false);
 
     useEffect(() => {
         carregarBancos();
     }, []);
-
-    useEffect(() => {
-        if (formData.bancoId) {
-            carregarAgencias(formData.bancoId);
-        } else {
-            setAgencias([]);
-        }
-    }, [formData.bancoId]);
 
     const carregarBancos = async () => {
         try {
@@ -110,30 +131,17 @@ export default function NovoCredorPage() {
             setBancos(data);
         } catch (error) {
             console.error('Erro ao carregar bancos:', error);
-            alert('Erro ao carregar bancos.');
         } finally {
             setLoadingBancos(false);
-        }
-    };
-
-    const carregarAgencias = async (bancoId: string) => {
-        try {
-            setLoadingAgencias(true);
-            const data = await agenciasService.listarPorBanco(bancoId);
-            setAgencias(data);
-        } catch (error) {
-            console.error('Erro ao carregar agências:', error);
-        } finally {
-            setLoadingAgencias(false);
         }
     };
 
     const validar = (): boolean => {
         const novosErros: Record<string, string> = {};
 
-        if (!formData.tipoCredor) novosErros.tipo = 'Tipo é obrigatório';
-        if (!formData.identificador) novosErros.cpfCnpj = 'CPF/CNPJ é obrigatório';
-        if (!formData.nome) novosErros.nome = 'Nome é obrigatório';
+        if (!formData.tipoCredor) novosErros.tipo = 'Tipo de Credor é obrigatório';
+        if (!formData.identificador) novosErros.cpfCnpj = 'Identificador é obrigatório';
+        if (!formData.nome) novosErros.nome = 'Nome/Razão Social é obrigatório';
 
         if (formData.tipoCredor === 'Jurídica' && formData.identificador.length !== 18) {
             novosErros.cpfCnpj = 'CNPJ inválido';
@@ -160,16 +168,13 @@ export default function NovoCredorPage() {
 
         const commonData: Partial<ICredor> = {
             tipoCredor: formData.tipoCredor as ICredor['tipoCredor'],
+            cadastroRfb: formData.cadastroRfb,
             identificador: formData.identificador,
             nome: formData.nome,
             nomeFantasia: formData.nomeFantasia,
-            naturezaJuridica: formData.naturezaJuridica,
             inscricaoEstadual: formData.inscricaoEstadual,
             inscricaoMunicipal: formData.inscricaoMunicipal,
             nitPisPasep: formData.nitPisPasep,
-            rg: formData.rg,
-            orgaoEmissorRg: formData.orgaoEmissorRg,
-            dataEmissaoRg: formData.dataEmissaoRg ? new Date(formData.dataEmissaoRg) : undefined,
             email: formData.email,
             email2: formData.email2,
             telefoneComercial: formData.telefone,
@@ -188,13 +193,11 @@ export default function NovoCredorPage() {
             pontoReferencia: formData.pontoReferencia,
             bancoId: formData.bancoId,
             agencia: formData.agencia,
-            digitoAgencia: formData.digitoAgencia,
             contaBancaria: formData.conta,
-            digitoConta: formData.digitoConta,
             tipoContaBancaria: formData.tipoConta as ICredor['tipoContaBancaria'],
-            optanteSimples: formData.optanteSimples,
+            optanteSimples: formData.optanteSimples === 'Sim',
             dataFinalOpcaoSimples: formData.dataFinalOpcaoSimples ? new Date(formData.dataFinalOpcaoSimples) : undefined,
-            optanteCprb: formData.optanteCprb,
+            optanteCprb: formData.optanteCprb === 'Sim',
             dataFinalOpcaoCprb: formData.dataFinalOpcaoCprb ? new Date(formData.dataFinalOpcaoCprb) : undefined,
             cpfAdministrador: formData.cpfAdministrador,
             nomeAdministrador: formData.nomeAdministrador,
@@ -203,9 +206,8 @@ export default function NovoCredorPage() {
             situacaoCadastral: formData.situacaoCadastral,
             dataSituacaoCadastral: formData.dataSituacaoCadastral ? new Date(formData.dataSituacaoCadastral) : undefined,
             observacao: formData.observacoes,
-            cadastroRfb: '',
-            inativo: false,
-            bloqueado: false,
+            inativo: formData.inativo,
+            bloqueado: formData.bloqueado,
         };
 
         try {
@@ -236,6 +238,10 @@ export default function NovoCredorPage() {
         return maskCnpj(valor);
     };
 
+    const CharCount = ({ value, max }: { value: string; max: number }) => (
+        <p className="text-xs text-muted-foreground text-right mt-1">{value.length}/{max} caracteres</p>
+    );
+
     return (
         <div className="space-y-6">
             <div className="flex items-center gap-4">
@@ -243,12 +249,9 @@ export default function NovoCredorPage() {
                     <ArrowLeft className="h-4 w-4" />
                 </Button>
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-                        <Wallet className="h-6 w-6" />
-                        Novo Credor
-                    </h1>
+                    <h1 className="text-2xl font-bold tracking-tight">Incluir Novo Credor</h1>
                     <p className="text-muted-foreground">
-                        Cadastro completo de novo credor
+                        Preencha os dados do credor
                     </p>
                 </div>
             </div>
@@ -256,520 +259,696 @@ export default function NovoCredorPage() {
             <Card>
                 <CardContent className="pt-6">
                     <Tabs value={abaAtiva} onValueChange={setAbaAtiva}>
-                        <TabsList className="grid w-full grid-cols-6 mb-6">
-                            <TabsTrigger value="identificacao" className="flex items-center gap-1">
-                                <User className="h-4 w-4" />
-                                <span className="hidden sm:inline">Identificação</span>
-                            </TabsTrigger>
-                            <TabsTrigger value="documentos" className="flex items-center gap-1">
-                                <FileText className="h-4 w-4" />
-                                <span className="hidden sm:inline">Documentos</span>
-                            </TabsTrigger>
-                            <TabsTrigger value="contato" className="flex items-center gap-1">
-                                <User className="h-4 w-4" />
-                                <span className="hidden sm:inline">Contato</span>
-                            </TabsTrigger>
-                            <TabsTrigger value="endereco" className="flex items-center gap-1">
-                                <MapPin className="h-4 w-4" />
-                                <span className="hidden sm:inline">Endereço</span>
-                            </TabsTrigger>
-                            <TabsTrigger value="bancarios" className="flex items-center gap-1">
-                                <CreditCard className="h-4 w-4" />
-                                <span className="hidden sm:inline">Bancários</span>
-                            </TabsTrigger>
-                            <TabsTrigger value="complementares" className="flex items-center gap-1">
-                                <Building className="h-4 w-4" />
-                                <span className="hidden sm:inline">Complementar</span>
-                            </TabsTrigger>
+                        <TabsList className="grid w-full grid-cols-5 mb-6">
+                            <TabsTrigger value="identificacao">01 - Identificação</TabsTrigger>
+                            <TabsTrigger value="endereco">02 - Endereço</TabsTrigger>
+                            <TabsTrigger value="contato">03 - Contato</TabsTrigger>
+                            <TabsTrigger value="bancarios">04 - Dados Bancários</TabsTrigger>
+                            <TabsTrigger value="complementares">05 - Complementares</TabsTrigger>
                         </TabsList>
 
-                        {/* Aba Identificação */}
-                        <TabsContent value="identificacao" className="space-y-4">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-1">
-                                        <Label>Tipo<span className="text-red-500 ml-1">*</span></Label>
-                                        <FieldTooltip content="Pessoa Física ou Jurídica" />
-                                    </div>
-                                    <Select
-                                        value={formData.tipoCredor}
-                                        onValueChange={(v) =>
-                                            setFormData({ ...formData, tipoCredor: v as ICredor['tipoCredor'], identificador: '' })
-                                        }
-                                    >
-                                        <SelectTrigger className={erros.tipo ? 'border-red-500' : ''}>
-                                            <SelectValue placeholder="Selecione" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {TIPOS_CREDOR.map((t) => (
-                                                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    {erros.tipo && <p className="text-sm text-red-500">{erros.tipo}</p>}
-                                </div>
-
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-1">
-                                        <Label>
-                                            {formData.tipoCredor === 'Física' ? 'CPF' : 'CNPJ'}
-                                            <span className="text-red-500 ml-1">*</span>
-                                        </Label>
-                                        <FieldTooltip content="Documento de identificação" />
-                                    </div>
-                                    <Input
-                                        value={formData.identificador}
-                                        onChange={(e) =>
-                                            setFormData({ ...formData, identificador: aplicarMascaraDocumento(e.target.value) })
-                                        }
-                                        disabled={!formData.tipoCredor}
-                                        maxLength={formData.tipoCredor === 'Física' ? 14 : 18}
-                                        placeholder={formData.tipoCredor === 'Física' ? '000.000.000-00' : '00.000.000/0000-00'}
-                                        className={erros.cpfCnpj ? 'border-red-500' : ''}
-                                    />
-                                    {erros.cpfCnpj && <p className="text-sm text-red-500">{erros.cpfCnpj}</p>}
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-1">
-                                        <Label>Nome/Razão Social<span className="text-red-500 ml-1">*</span></Label>
-                                    </div>
-                                    <Input
-                                        value={formData.nome}
-                                        onChange={(e) => setFormData({ ...formData, nome: e.target.value.toUpperCase() })}
-                                        maxLength={FIELD_LIMITS.nome}
-                                        className={erros.nome ? 'border-red-500' : ''}
-                                    />
-                                    {erros.nome && <p className="text-sm text-red-500">{erros.nome}</p>}
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label>Nome Fantasia</Label>
-                                    <Input
-                                        value={formData.nomeFantasia}
-                                        onChange={(e) => setFormData({ ...formData, nomeFantasia: e.target.value.toUpperCase() })}
-                                        maxLength={FIELD_LIMITS.nome}
-                                    />
-                                </div>
-                            </div>
-
-                            {formData.tipoCredor === 'Jurídica' && (
-                                <>
-                                    <div className="space-y-2">
-                                        <Label>Natureza Jurídica</Label>
-                                        <Input
-                                            value={formData.naturezaJuridica}
-                                            onChange={(e) => setFormData({ ...formData, naturezaJuridica: e.target.value })}
-                                        />
-                                    </div>
-
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <div className="flex items-center space-x-2">
-                                            <Checkbox
-                                                id="optanteSimples"
-                                                checked={formData.optanteSimples}
-                                                onCheckedChange={(v) => setFormData({ ...formData, optanteSimples: v as boolean })}
-                                            />
-                                            <Label htmlFor="optanteSimples">Optante Simples Nacional</Label>
-                                        </div>
-                                        {formData.optanteSimples && (
-                                            <div className="space-y-2">
-                                                <Label>Data Final Opção</Label>
-                                                <Input
-                                                    type="date"
-                                                    value={formData.dataFinalOpcaoSimples}
-                                                    onChange={(e) => setFormData({ ...formData, dataFinalOpcaoSimples: e.target.value })}
-                                                />
+                        {/* ===== ABA 01 - IDENTIFICAÇÃO ===== */}
+                        <TabsContent value="identificacao" className="space-y-8">
+                            {/* Seção: Dados Básicos */}
+                            <Card>
+                                <CardHeader className="pb-4">
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                        📋 Dados Básicos
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    {/* Tipo de Credor, Cadastro RFB, Identificador */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Tipo de Credor<span className="text-red-500 ml-1">*</span></Label>
+                                                <FieldTooltip content="Pessoa Física ou Jurídica" />
                                             </div>
-                                        )}
+                                            <Select
+                                                value={formData.tipoCredor}
+                                                onValueChange={(v) =>
+                                                    setFormData({ ...formData, tipoCredor: v as ICredor['tipoCredor'], identificador: '' })
+                                                }
+                                            >
+                                                <SelectTrigger className={erros.tipo ? 'border-red-500' : ''}>
+                                                    <SelectValue placeholder="Selecione" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {TIPOS_CREDOR.map((t) => (
+                                                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            {erros.tipo && <p className="text-sm text-red-500">{erros.tipo}</p>}
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Cadastro RFB<span className="text-red-500 ml-1">*</span></Label>
+                                                <FieldTooltip content="Tipo de cadastro na Receita Federal do Brasil" />
+                                            </div>
+                                            <Select
+                                                value={formData.cadastroRfb}
+                                                onValueChange={(v) => setFormData({ ...formData, cadastroRfb: v })}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Selecione" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {CADASTRO_RFB_OPTIONS.map((o) => (
+                                                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Identificador<span className="text-red-500 ml-1">*</span></Label>
+                                                <FieldTooltip content="CPF ou CNPJ do credor" />
+                                            </div>
+                                            <Input
+                                                value={formData.identificador}
+                                                onChange={(e) =>
+                                                    setFormData({ ...formData, identificador: aplicarMascaraDocumento(e.target.value) })
+                                                }
+                                                disabled={!formData.tipoCredor}
+                                                maxLength={formData.tipoCredor === 'Física' ? 14 : 18}
+                                                placeholder="000.000.000-00"
+                                            />
+                                            <CharCount value={formData.identificador} max={18} />
+                                            {erros.cpfCnpj && <p className="text-sm text-red-500">{erros.cpfCnpj}</p>}
+                                        </div>
+                                    </div>
+
+                                    {/* Nome / Razão Social, Nome Fantasia */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Nome / Razão Social<span className="text-red-500 ml-1">*</span></Label>
+                                                <FieldTooltip content="Nome completo ou razão social do credor" />
+                                            </div>
+                                            <Input
+                                                value={formData.nome}
+                                                onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                                                maxLength={200}
+                                                placeholder="Nome completo ou razão social"
+                                                className={erros.nome ? 'border-red-500' : ''}
+                                            />
+                                            <CharCount value={formData.nome} max={200} />
+                                            {erros.nome && <p className="text-sm text-red-500">{erros.nome}</p>}
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Nome Fantasia</Label>
+                                                <FieldTooltip content="Nome fantasia da empresa (opcional)" />
+                                            </div>
+                                            <Input
+                                                value={formData.nomeFantasia}
+                                                onChange={(e) => setFormData({ ...formData, nomeFantasia: e.target.value })}
+                                                maxLength={100}
+                                                placeholder="Nome fantasia"
+                                            />
+                                            <CharCount value={formData.nomeFantasia} max={100} />
+                                        </div>
+                                    </div>
+
+                                    {/* Inscrição Estadual, Inscrição Municipal, NIT/PIS/PASEP */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Inscrição Estadual</Label>
+                                                <FieldTooltip content="Número da Inscrição Estadual" />
+                                            </div>
+                                            <Input
+                                                value={formData.inscricaoEstadual}
+                                                onChange={(e) => setFormData({ ...formData, inscricaoEstadual: maskInscricaoEstadual(e.target.value) })}
+                                                maxLength={20}
+                                                placeholder="000.000.000.000"
+                                            />
+                                            <CharCount value={formData.inscricaoEstadual} max={20} />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Inscrição Municipal</Label>
+                                                <FieldTooltip content="Número da Inscrição Municipal" />
+                                            </div>
+                                            <Input
+                                                value={formData.inscricaoMunicipal}
+                                                onChange={(e) => setFormData({ ...formData, inscricaoMunicipal: e.target.value })}
+                                                maxLength={20}
+                                                placeholder="0000000"
+                                            />
+                                            <CharCount value={formData.inscricaoMunicipal} max={20} />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>NIT / PIS / PASEP</Label>
+                                                <FieldTooltip content="Número de Identificação do Trabalhador" />
+                                            </div>
+                                            <Input
+                                                value={formData.nitPisPasep}
+                                                onChange={(e) => setFormData({ ...formData, nitPisPasep: maskNitPisPasep(e.target.value) })}
+                                                maxLength={20}
+                                                placeholder="000.00000.00-0"
+                                            />
+                                            <CharCount value={formData.nitPisPasep} max={20} />
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            {/* Seção: Regimes Tributários */}
+                            <Card>
+                                <CardHeader className="pb-4">
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                        🔥 Regimes Tributários
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Optante Simples</Label>
+                                                <FieldTooltip content="Indicar se o credor é optante pelo Simples Nacional" />
+                                            </div>
+                                            <Select
+                                                value={formData.optanteSimples}
+                                                onValueChange={(v) => setFormData({ ...formData, optanteSimples: v })}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Selecione" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {OPTANTE_OPTIONS.map((o) => (
+                                                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Data Final Opção Simples</Label>
+                                                <FieldTooltip content="Data de vigência final da opção pelo Simples Nacional" />
+                                            </div>
+                                            <Input
+                                                type="date"
+                                                value={formData.dataFinalOpcaoSimples}
+                                                onChange={(e) => setFormData({ ...formData, dataFinalOpcaoSimples: e.target.value })}
+                                            />
+                                        </div>
                                     </div>
 
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div className="space-y-2">
-                                            <Label>CPF Administrador</Label>
+                                            <div className="flex items-center gap-1">
+                                                <Label>Optante CPRB</Label>
+                                                <FieldTooltip content="Indicar se o credor é optante pela CPRB" />
+                                            </div>
+                                            <Select
+                                                value={formData.optanteCprb}
+                                                onValueChange={(v) => setFormData({ ...formData, optanteCprb: v })}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Selecione" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {OPTANTE_OPTIONS.map((o) => (
+                                                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Data Final Opção CPRB</Label>
+                                                <FieldTooltip content="Data de vigência final da opção pela CPRB" />
+                                            </div>
+                                            <Input
+                                                type="date"
+                                                value={formData.dataFinalOpcaoCprb}
+                                                onChange={(e) => setFormData({ ...formData, dataFinalOpcaoCprb: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            {/* Seção: Administrador(a) Responsável */}
+                            <Card>
+                                <CardHeader className="pb-4">
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                        👤 Administrador(a) Responsável
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>CPF do Administrador</Label>
+                                                <FieldTooltip content="CPF do administrador responsável" />
+                                            </div>
                                             <Input
                                                 value={formData.cpfAdministrador}
                                                 onChange={(e) => setFormData({ ...formData, cpfAdministrador: maskCpf(e.target.value) })}
                                                 maxLength={14}
+                                                placeholder="000.000.000-00"
                                             />
+                                            <CharCount value={formData.cpfAdministrador} max={14} />
                                         </div>
+
                                         <div className="space-y-2">
-                                            <Label>Nome Administrador</Label>
+                                            <div className="flex items-center gap-1">
+                                                <Label>Nome do Administrador</Label>
+                                                <FieldTooltip content="Nome completo do administrador responsável" />
+                                            </div>
                                             <Input
                                                 value={formData.nomeAdministrador}
-                                                onChange={(e) => setFormData({ ...formData, nomeAdministrador: e.target.value.toUpperCase() })}
+                                                onChange={(e) => setFormData({ ...formData, nomeAdministrador: e.target.value })}
+                                                maxLength={150}
+                                                placeholder="Nome completo"
                                             />
+                                            <CharCount value={formData.nomeAdministrador} max={150} />
                                         </div>
                                     </div>
-                                </>
-                            )}
+                                </CardContent>
+                            </Card>
                         </TabsContent>
 
-                        {/* Aba Documentos */}
-                        <TabsContent value="documentos" className="space-y-4">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Inscrição Estadual</Label>
-                                    <Input
-                                        value={formData.inscricaoEstadual}
-                                        onChange={(e) => setFormData({ ...formData, inscricaoEstadual: maskInscricaoEstadual(e.target.value) })}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Inscrição Municipal</Label>
-                                    <Input
-                                        value={formData.inscricaoMunicipal}
-                                        onChange={(e) => setFormData({ ...formData, inscricaoMunicipal: e.target.value })}
-                                    />
-                                </div>
-                            </div>
-
-                            {formData.tipoCredor === 'Física' && (
-                                <>
+                        {/* ===== ABA 02 - ENDEREÇO ===== */}
+                        <TabsContent value="endereco" className="space-y-8">
+                            <Card>
+                                <CardHeader className="pb-4">
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                        📍 Endereço
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    {/* CEP, Logradouro */}
                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                         <div className="space-y-2">
-                                            <Label>RG</Label>
+                                            <div className="flex items-center gap-1">
+                                                <Label>CEP</Label>
+                                                <FieldTooltip content="Código de Endereçamento Postal" />
+                                            </div>
                                             <Input
-                                                value={formData.rg}
-                                                onChange={(e) => setFormData({ ...formData, rg: e.target.value })}
+                                                value={formData.cep}
+                                                onChange={(e) => setFormData({ ...formData, cep: maskCep(e.target.value) })}
+                                                maxLength={10}
+                                                placeholder="00000-000"
                                             />
+                                            <CharCount value={formData.cep} max={10} />
                                         </div>
-                                        <div className="space-y-2">
-                                            <Label>Órgão Emissor</Label>
+                                        <div className="space-y-2 sm:col-span-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Logradouro</Label>
+                                                <FieldTooltip content="Rua, Avenida, Travessa, etc." />
+                                            </div>
                                             <Input
-                                                value={formData.orgaoEmissorRg}
-                                                onChange={(e) => setFormData({ ...formData, orgaoEmissorRg: e.target.value.toUpperCase() })}
+                                                value={formData.logradouro}
+                                                onChange={(e) => setFormData({ ...formData, logradouro: e.target.value })}
+                                                maxLength={100}
+                                                placeholder="Rua, Avenida, etc."
                                             />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label>Data Emissão</Label>
-                                            <Input
-                                                type="date"
-                                                value={formData.dataEmissaoRg}
-                                                onChange={(e) => setFormData({ ...formData, dataEmissaoRg: e.target.value })}
-                                            />
+                                            <CharCount value={formData.logradouro} max={100} />
                                         </div>
                                     </div>
+
+                                    {/* Número, Complemento, Bairro */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Número</Label>
+                                                <FieldTooltip content="Número do endereço" />
+                                            </div>
+                                            <Input
+                                                value={formData.numero}
+                                                onChange={(e) => setFormData({ ...formData, numero: e.target.value })}
+                                                maxLength={10}
+                                                placeholder="100"
+                                            />
+                                            <CharCount value={formData.numero} max={10} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Complemento</Label>
+                                                <FieldTooltip content="Complemento do endereço (Sala, Bloco, etc.)" />
+                                            </div>
+                                            <Input
+                                                value={formData.complemento}
+                                                onChange={(e) => setFormData({ ...formData, complemento: e.target.value })}
+                                                maxLength={50}
+                                                placeholder="Sala, Bloco, etc."
+                                            />
+                                            <CharCount value={formData.complemento} max={50} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Bairro</Label>
+                                                <FieldTooltip content="Bairro do endereço" />
+                                            </div>
+                                            <Input
+                                                value={formData.bairro}
+                                                onChange={(e) => setFormData({ ...formData, bairro: e.target.value })}
+                                                maxLength={80}
+                                                placeholder="Nome do bairro"
+                                            />
+                                            <CharCount value={formData.bairro} max={80} />
+                                        </div>
+                                    </div>
+
+                                    {/* Município, UF */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Município</Label>
+                                                <FieldTooltip content="Nome do município" />
+                                            </div>
+                                            <Input
+                                                value={formData.municipio}
+                                                onChange={(e) => setFormData({ ...formData, municipio: e.target.value })}
+                                                maxLength={80}
+                                                placeholder="Nome do município"
+                                            />
+                                            <CharCount value={formData.municipio} max={80} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>UF</Label>
+                                                <FieldTooltip content="Unidade da Federação" />
+                                            </div>
+                                            <Select
+                                                value={formData.uf}
+                                                onValueChange={(v) => setFormData({ ...formData, uf: v })}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Selecione a UF" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {ESTADOS_BRASIL.map((uf) => (
+                                                        <SelectItem key={uf.value} value={uf.value}>{uf.label}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </div>
+
+                                    {/* Caixa Postal, Ponto de Referência */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Caixa Postal</Label>
+                                                <FieldTooltip content="Número da Caixa Postal" />
+                                            </div>
+                                            <Input
+                                                value={formData.caixaPostal}
+                                                onChange={(e) => setFormData({ ...formData, caixaPostal: e.target.value })}
+                                                maxLength={20}
+                                                placeholder="Caixa Postal"
+                                            />
+                                            <CharCount value={formData.caixaPostal} max={20} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Ponto de Referência</Label>
+                                                <FieldTooltip content="Ponto de referência para facilitar a localização" />
+                                            </div>
+                                            <Input
+                                                value={formData.pontoReferencia}
+                                                onChange={(e) => setFormData({ ...formData, pontoReferencia: e.target.value })}
+                                                maxLength={200}
+                                                placeholder="Ponto de referência"
+                                            />
+                                            <CharCount value={formData.pontoReferencia} max={200} />
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
+
+                        {/* ===== ABA 03 - CONTATO ===== */}
+                        <TabsContent value="contato" className="space-y-8">
+                            <Card>
+                                <CardHeader className="pb-4">
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                        📞 Informações de Contato
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    {/* Telefone Comercial 1, Telefone Comercial 2 */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Telefone Comercial 1</Label>
+                                                <FieldTooltip content="Telefone comercial principal" />
+                                            </div>
+                                            <Input
+                                                value={formData.telefone}
+                                                onChange={(e) => setFormData({ ...formData, telefone: maskTelefone(e.target.value) })}
+                                                maxLength={15}
+                                                placeholder="(00) 0000-0000"
+                                            />
+                                            <CharCount value={formData.telefone} max={15} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Telefone Comercial 2</Label>
+                                                <FieldTooltip content="Telefone comercial secundário" />
+                                            </div>
+                                            <Input
+                                                value={formData.telefoneComercial2}
+                                                onChange={(e) => setFormData({ ...formData, telefoneComercial2: maskTelefone(e.target.value) })}
+                                                maxLength={15}
+                                                placeholder="(00) 0000-0000"
+                                            />
+                                            <CharCount value={formData.telefoneComercial2} max={15} />
+                                        </div>
+                                    </div>
+
+                                    {/* Telefone Residencial, Telefone Celular */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Telefone Residencial</Label>
+                                                <FieldTooltip content="Telefone residencial" />
+                                            </div>
+                                            <Input
+                                                value={formData.telefoneResidencial}
+                                                onChange={(e) => setFormData({ ...formData, telefoneResidencial: maskTelefone(e.target.value) })}
+                                                maxLength={15}
+                                                placeholder="(00) 0000-0000"
+                                            />
+                                            <CharCount value={formData.telefoneResidencial} max={15} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Telefone Celular</Label>
+                                                <FieldTooltip content="Telefone celular" />
+                                            </div>
+                                            <Input
+                                                value={formData.celular}
+                                                onChange={(e) => setFormData({ ...formData, celular: maskTelefone(e.target.value) })}
+                                                maxLength={15}
+                                                placeholder="(00) 00000-0000"
+                                            />
+                                            <CharCount value={formData.celular} max={15} />
+                                        </div>
+                                    </div>
+
+                                    {/* E-mail Principal, E-mail Secundário */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>E-mail Principal</Label>
+                                                <FieldTooltip content="Endereço de e-mail principal" />
+                                            </div>
+                                            <Input
+                                                type="email"
+                                                value={formData.email}
+                                                onChange={(e) => setFormData({ ...formData, email: e.target.value.toLowerCase() })}
+                                                maxLength={100}
+                                                placeholder="email@exemplo.com"
+                                            />
+                                            <CharCount value={formData.email} max={100} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>E-mail Secundário</Label>
+                                                <FieldTooltip content="Endereço de e-mail secundário (opcional)" />
+                                            </div>
+                                            <Input
+                                                type="email"
+                                                value={formData.email2}
+                                                onChange={(e) => setFormData({ ...formData, email2: e.target.value.toLowerCase() })}
+                                                maxLength={100}
+                                                placeholder="email2@exemplo.com"
+                                            />
+                                            <CharCount value={formData.email2} max={100} />
+                                        </div>
+                                    </div>
+
+                                    {/* Website */}
                                     <div className="space-y-2">
-                                        <Label>NIT/PIS/PASEP</Label>
+                                        <div className="flex items-center gap-1">
+                                            <Label>Website</Label>
+                                            <FieldTooltip content="Endereço do website" />
+                                        </div>
                                         <Input
-                                            value={formData.nitPisPasep}
-                                            onChange={(e) => setFormData({ ...formData, nitPisPasep: maskNitPisPasep(e.target.value) })}
-                                            maxLength={14}
+                                            value={formData.site}
+                                            onChange={(e) => setFormData({ ...formData, site: e.target.value.toLowerCase() })}
+                                            maxLength={100}
+                                            placeholder="www.exemplo.com.br"
                                         />
+                                        <CharCount value={formData.site} max={100} />
                                     </div>
-                                </>
-                            )}
+                                </CardContent>
+                            </Card>
                         </TabsContent>
 
-                        {/* Aba Contato */}
-                        <TabsContent value="contato" className="space-y-4">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Email</Label>
-                                    <Input
-                                        type="email"
-                                        value={formData.email}
-                                        onChange={(e) => setFormData({ ...formData, email: e.target.value.toLowerCase() })}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Email Secundário</Label>
-                                    <Input
-                                        type="email"
-                                        value={formData.email2}
-                                        onChange={(e) => setFormData({ ...formData, email2: e.target.value.toLowerCase() })}
-                                    />
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Telefone Comercial</Label>
-                                    <Input
-                                        value={formData.telefone}
-                                        onChange={(e) => setFormData({ ...formData, telefone: maskTelefone(e.target.value) })}
-                                        maxLength={15}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Tel. Comercial 2</Label>
-                                    <Input
-                                        value={formData.telefoneComercial2}
-                                        onChange={(e) => setFormData({ ...formData, telefoneComercial2: maskTelefone(e.target.value) })}
-                                        maxLength={15}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Celular</Label>
-                                    <Input
-                                        value={formData.celular}
-                                        onChange={(e) => setFormData({ ...formData, celular: maskTelefone(e.target.value) })}
-                                        maxLength={15}
-                                    />
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Telefone Residencial</Label>
-                                    <Input
-                                        value={formData.telefoneResidencial}
-                                        onChange={(e) => setFormData({ ...formData, telefoneResidencial: maskTelefone(e.target.value) })}
-                                        maxLength={15}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Website</Label>
-                                    <Input
-                                        value={formData.site}
-                                        onChange={(e) => setFormData({ ...formData, site: e.target.value.toLowerCase() })}
-                                        placeholder="www.exemplo.com.br"
-                                    />
-                                </div>
-                            </div>
-                        </TabsContent>
-
-                        {/* Aba Endereço */}
-                        <TabsContent value="endereco" className="space-y-4">
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                <div className="space-y-2">
-                                    <Label>CEP</Label>
-                                    <Input
-                                        value={formData.cep}
-                                        onChange={(e) => setFormData({ ...formData, cep: maskCep(e.target.value) })}
-                                        maxLength={9}
-                                        placeholder="00000-000"
-                                    />
-                                </div>
-                                <div className="space-y-2 sm:col-span-2">
-                                    <Label>Logradouro</Label>
-                                    <Input
-                                        value={formData.logradouro}
-                                        onChange={(e) => setFormData({ ...formData, logradouro: e.target.value.toUpperCase() })}
-                                    />
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Número</Label>
-                                    <Input
-                                        value={formData.numero}
-                                        onChange={(e) => setFormData({ ...formData, numero: e.target.value })}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Complemento</Label>
-                                    <Input
-                                        value={formData.complemento}
-                                        onChange={(e) => setFormData({ ...formData, complemento: e.target.value.toUpperCase() })}
-                                    />
-                                </div>
-                                <div className="space-y-2 sm:col-span-2">
-                                    <Label>Bairro</Label>
-                                    <Input
-                                        value={formData.bairro}
-                                        onChange={(e) => setFormData({ ...formData, bairro: e.target.value.toUpperCase() })}
-                                    />
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Município</Label>
-                                    <Input
-                                        value={formData.municipio}
-                                        onChange={(e) => setFormData({ ...formData, municipio: e.target.value.toUpperCase() })}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>UF</Label>
-                                    <Select
-                                        value={formData.uf}
-                                        onValueChange={(v) => setFormData({ ...formData, uf: v })}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Selecione" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {ESTADOS_BRASIL.map((uf) => (
-                                                <SelectItem key={uf.value} value={uf.value}>{uf.label}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Caixa Postal</Label>
-                                    <Input
-                                        value={formData.caixaPostal}
-                                        onChange={(e) => setFormData({ ...formData, caixaPostal: e.target.value })}
-                                    />
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Ponto de Referência</Label>
-                                <Input
-                                    value={formData.pontoReferencia}
-                                    onChange={(e) => setFormData({ ...formData, pontoReferencia: e.target.value.toUpperCase() })}
-                                />
-                            </div>
-                        </TabsContent>
-
-                        {/* Aba Bancários */}
-                        <TabsContent value="bancarios" className="space-y-4">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-1">
-                                        <Label>Banco</Label>
-                                        {loadingBancos && <Loader2 className="h-3 w-3 animate-spin" />}
-                                    </div>
-                                    <Select
-                                        value={formData.bancoId}
-                                        onValueChange={(v) => {
-                                            setFormData({
-                                                ...formData,
-                                                bancoId: v,
-                                                agencia: '',
-                                                digitoAgencia: ''
-                                            });
-                                        }}
-                                    >
-                                        <SelectTrigger className="w-full">
-                                            <SelectValue placeholder="Selecione o banco" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {bancos.map((b) => (
-                                                <SelectItem key={b.id} value={b.id}>
-                                                    {b.codigo} - {b.nome}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Tipo de Conta</Label>
-                                    <Select
-                                        value={formData.tipoConta}
-                                        onValueChange={(v) => setFormData({ ...formData, tipoConta: v as ICredor['tipoContaBancaria'] })}
-                                    >
-                                        <SelectTrigger className="w-full">
-                                            <SelectValue placeholder="Selecione" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {TIPOS_CONTA_BANCARIA.map((t) => (
-                                                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                                <div className="space-y-2">
-                                    <div className="flex items-center gap-1">
-                                        <Label>Agência</Label>
-                                        {loadingAgencias && <Loader2 className="h-3 w-3 animate-spin" />}
-                                    </div>
-                                    {agencias.length > 0 ? (
+                        {/* ===== ABA 04 - DADOS BANCÁRIOS ===== */}
+                        <TabsContent value="bancarios" className="space-y-8">
+                            <Card>
+                                <CardHeader className="pb-4">
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                        🏦 Informações Bancárias
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    {/* Banco */}
+                                    <div className="space-y-2">
+                                        <div className="flex items-center gap-1">
+                                            <Label>Banco</Label>
+                                            <FieldTooltip content="Selecione o banco" />
+                                            {loadingBancos && <Loader2 className="h-3 w-3 animate-spin" />}
+                                        </div>
                                         <Select
-                                            value={agencias.find(a => a.codigo === formData.agencia)?.id || ''}
-                                            onValueChange={(id) => {
-                                                const agencia = agencias.find(a => a.id === id);
-                                                if (agencia) {
-                                                    setFormData({
-                                                        ...formData,
-                                                        agencia: agencia.codigo,
-                                                        digitoAgencia: agencia.digito_verificador || ''
-                                                    });
-                                                }
+                                            value={formData.bancoId}
+                                            onValueChange={(v) => {
+                                                setFormData({
+                                                    ...formData,
+                                                    bancoId: v,
+                                                    agencia: '',
+                                                });
                                             }}
                                         >
                                             <SelectTrigger className="w-full">
-                                                <SelectValue placeholder="Selecione a agência" />
+                                                <SelectValue placeholder="Selecione o banco" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {agencias.map((a) => (
-                                                    <SelectItem key={a.id} value={a.id}>
-                                                        {a.codigo} - {a.nome}
+                                                {bancos.map((b) => (
+                                                    <SelectItem key={b.id} value={b.id}>
+                                                        {b.codigo} - {b.nome}
                                                     </SelectItem>
                                                 ))}
                                             </SelectContent>
                                         </Select>
-                                    ) : (
-                                        <Input
-                                            value={formData.agencia}
-                                            onChange={(e) => setFormData({ ...formData, agencia: e.target.value })}
-                                            maxLength={6}
-                                            placeholder={formData.bancoId ? "Digite ou cadastre a agência" : "Selecione o banco primeiro"}
-                                            disabled={!formData.bancoId}
-                                        />
-                                    )}
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Dígito Agência</Label>
-                                    <Input
-                                        value={formData.digitoAgencia}
-                                        onChange={(e) => setFormData({ ...formData, digitoAgencia: e.target.value })}
-                                        maxLength={1}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Conta</Label>
-                                    <Input
-                                        value={formData.conta}
-                                        onChange={(e) => setFormData({ ...formData, conta: e.target.value })}
-                                        maxLength={12}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Dígito Conta</Label>
-                                    <Input
-                                        value={formData.digitoConta}
-                                        onChange={(e) => setFormData({ ...formData, digitoConta: e.target.value })}
-                                        maxLength={2}
-                                    />
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Tipo de Chave Pix</Label>
-                                    <Select
-                                        value={formData.tipoChavePix}
-                                        onValueChange={(v) => setFormData({ ...formData, tipoChavePix: v })}
-                                    >
-                                        <SelectTrigger className="w-full">
-                                            <SelectValue placeholder="Selecione..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="cpf_cnpj">CPF/CNPJ</SelectItem>
-                                            <SelectItem value="email">E-mail</SelectItem>
-                                            <SelectItem value="telefone">Telefone</SelectItem>
-                                            <SelectItem value="aleatoria">Chave Aleatória</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Chave Pix</Label>
-                                    <Input
-                                        value={formData.chavePix}
-                                        onChange={(e) => setFormData({ ...formData, chavePix: e.target.value })}
-                                    />
-                                </div>
-                            </div>
-                        </TabsContent>
+                                    </div>
 
-                        {/* Aba Complementares */}
-                        <TabsContent value="complementares" className="space-y-4">
-                            {formData.tipoCredor === 'Jurídica' && (
-                                <>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {/* Agência, Conta Bancária, Tipo de Conta */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                         <div className="space-y-2">
-                                            <Label>Porte do Estabelecimento</Label>
+                                            <div className="flex items-center gap-1">
+                                                <Label>Agência</Label>
+                                                <FieldTooltip content="Número da agência bancária" />
+                                            </div>
                                             <Input
-                                                value={formData.porteEstabelecimento}
-                                                onChange={(e) => setFormData({ ...formData, porteEstabelecimento: e.target.value })}
+                                                value={formData.agencia}
+                                                onChange={(e) => setFormData({ ...formData, agencia: e.target.value })}
+                                                maxLength={10}
+                                                placeholder="0000"
                                             />
+                                            <CharCount value={formData.agencia} max={10} />
                                         </div>
                                         <div className="space-y-2">
-                                            <Label>Data Abertura CNPJ</Label>
+                                            <div className="flex items-center gap-1">
+                                                <Label>Conta Bancária</Label>
+                                                <FieldTooltip content="Número da conta bancária com dígito" />
+                                            </div>
+                                            <Input
+                                                value={formData.conta}
+                                                onChange={(e) => setFormData({ ...formData, conta: e.target.value })}
+                                                maxLength={20}
+                                                placeholder="00000-0"
+                                            />
+                                            <CharCount value={formData.conta} max={20} />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Tipo de Conta</Label>
+                                                <FieldTooltip content="Tipo da conta bancária" />
+                                            </div>
+                                            <Select
+                                                value={formData.tipoConta}
+                                                onValueChange={(v) => setFormData({ ...formData, tipoConta: v as ICredor['tipoContaBancaria'] })}
+                                            >
+                                                <SelectTrigger className="w-full">
+                                                    <SelectValue placeholder="Selecione" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {TIPOS_CONTA_BANCARIA.map((t) => (
+                                                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </TabsContent>
+
+                        {/* ===== ABA 05 - COMPLEMENTARES ===== */}
+                        <TabsContent value="complementares" className="space-y-8">
+                            <Card>
+                                <CardHeader className="pb-4">
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                        📎 Informações Complementares
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    {/* Situação Cadastral, Data da Situação, Data Abertura CNPJ */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Situação Cadastral</Label>
+                                                <FieldTooltip content="Situação cadastral do credor na Receita Federal" />
+                                            </div>
+                                            <Select
+                                                value={formData.situacaoCadastral}
+                                                onValueChange={(v) => setFormData({ ...formData, situacaoCadastral: v })}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Selecione" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {SITUACAO_CADASTRAL_OPTIONS.map((o) => (
+                                                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Data da Situação</Label>
+                                                <FieldTooltip content="Data da última alteração da situação cadastral" />
+                                            </div>
+                                            <Input
+                                                type="date"
+                                                value={formData.dataSituacaoCadastral}
+                                                onChange={(e) => setFormData({ ...formData, dataSituacaoCadastral: e.target.value })}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <Label>Data Abertura CNPJ</Label>
+                                                <FieldTooltip content="Data de abertura/constituição da empresa" />
+                                            </div>
                                             <Input
                                                 type="date"
                                                 value={formData.dataAberturaCnpj}
@@ -777,33 +956,65 @@ export default function NovoCredorPage() {
                                             />
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <Label>Situação Cadastral</Label>
-                                            <Input
-                                                value={formData.situacaoCadastral}
-                                                onChange={(e) => setFormData({ ...formData, situacaoCadastral: e.target.value.toUpperCase() })}
-                                            />
+
+                                    {/* Porte Estabelecimento PJ */}
+                                    <div className="space-y-2">
+                                        <div className="flex items-center gap-1">
+                                            <Label>Porte Estabelecimento PJ</Label>
+                                            <FieldTooltip content="Porte do estabelecimento conforme classificação da Receita Federal" />
                                         </div>
-                                        <div className="space-y-2">
-                                            <Label>Data Situação Cadastral</Label>
-                                            <Input
-                                                type="date"
-                                                value={formData.dataSituacaoCadastral}
-                                                onChange={(e) => setFormData({ ...formData, dataSituacaoCadastral: e.target.value })}
+                                        <Select
+                                            value={formData.porteEstabelecimento}
+                                            onValueChange={(v) => setFormData({ ...formData, porteEstabelecimento: v })}
+                                        >
+                                            <SelectTrigger className="w-full sm:w-1/3">
+                                                <SelectValue placeholder="Selecione" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {PORTE_ESTABELECIMENTO_OPTIONS.map((o) => (
+                                                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    {/* Observações */}
+                                    <div className="space-y-2">
+                                        <div className="flex items-center gap-1">
+                                            <Label>Observações</Label>
+                                            <FieldTooltip content="Observações gerais sobre o credor" />
+                                        </div>
+                                        <textarea
+                                            className="min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                            value={formData.observacoes}
+                                            onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
+                                            placeholder="Observações gerais..."
+                                        />
+                                    </div>
+
+                                    {/* Inativo / Bloqueado */}
+                                    <div className="flex items-center gap-6 pt-2">
+                                        <div className="flex items-center gap-2">
+                                            <Checkbox
+                                                id="inativo"
+                                                checked={formData.inativo}
+                                                onCheckedChange={(v) => setFormData({ ...formData, inativo: v as boolean })}
                                             />
+                                            <Label htmlFor="inativo" className="cursor-pointer">Inativo</Label>
+                                            <FieldTooltip content="Marque se o credor estiver inativo" />
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <Checkbox
+                                                id="bloqueado"
+                                                checked={formData.bloqueado}
+                                                onCheckedChange={(v) => setFormData({ ...formData, bloqueado: v as boolean })}
+                                            />
+                                            <Label htmlFor="bloqueado" className="cursor-pointer">Bloqueado</Label>
+                                            <FieldTooltip content="Marque se o credor estiver bloqueado para transações" />
                                         </div>
                                     </div>
-                                </>
-                            )}
-                            <div className="space-y-2">
-                                <Label>Observações</Label>
-                                <textarea
-                                    className="min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                    value={formData.observacoes}
-                                    onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
-                                />
-                            </div>
+                                </CardContent>
+                            </Card>
                         </TabsContent>
                     </Tabs>
                 </CardContent>

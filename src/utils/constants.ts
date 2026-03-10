@@ -46,6 +46,8 @@ export const PODERES = [
     { value: 'Executivo', label: 'Executivo' },
     { value: 'Legislativo', label: 'Legislativo' },
     { value: 'Judiciário', label: 'Judiciário' },
+    { value: 'Tribunal de Contas', label: 'Tribunal de Contas' },
+    { value: 'Ministério Público', label: 'Ministério Público' },
 ] as const;
 
 // Tipos de administração
@@ -56,10 +58,13 @@ export const TIPOS_ADMINISTRACAO = [
 
 // Grupos de administração indireta
 export const GRUPOS_INDIRETA = [
+    { value: 'Empresa Pública', label: 'Empresa pública' },
+    { value: 'Sociedade de Economia Mista', label: 'Sociedade de Economia Mista' },
     { value: 'Autarquia', label: 'Autarquia' },
     { value: 'Fundação', label: 'Fundação' },
-    { value: 'Empresa Pública', label: 'Empresa Pública' },
-    { value: 'Sociedade de Economia Mista', label: 'Sociedade de Economia Mista' },
+    { value: 'Fundo', label: 'Fundo' },
+    { value: 'Hospital', label: 'Hospital' },
+    { value: 'Regime Especial', label: 'Regime Especial' },
 ] as const;
 
 // Tipos de credor

@@ -28,9 +28,6 @@ const emptyFormData = {
     nome: '',
     sigla: '',
     cnpj: '',
-    codigoSiasg: '',
-    ugTce: '',
-    ugSiafemSigef: '',
     nomeAnterior: '',
     nomeAbreviadoAnterior: '',
 };
@@ -104,9 +101,6 @@ export default function NovoOrgaoPage() {
                 nome: formData.nome,
                 sigla: formData.sigla,
                 cnpj: formData.cnpj,
-                codigo_siasg: formData.codigoSiasg,
-                ug_tce: formData.ugTce,
-                ug_siafem_sigef: formData.ugSiafemSigef,
                 nome_anterior: formData.nomeAnterior,
                 nome_abreviado_anterior: formData.nomeAbreviadoAnterior,
                 ativo: true,
@@ -276,7 +270,7 @@ export default function NovoOrgaoPage() {
                             </div>
                         </div>
 
-                        {/* CNPJ e Código SIASG */}
+                        {/* CNPJ */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <div className="flex items-center gap-1">
@@ -289,57 +283,6 @@ export default function NovoOrgaoPage() {
                                     onChange={(e) => setFormData({ ...formData, cnpj: maskCnpj(e.target.value) })}
                                     maxLength={18}
                                     placeholder="00.000.000/0001-00"
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <div className="flex items-center gap-1">
-                                    <Label htmlFor="codigoSiasg">Código SIASG</Label>
-                                    <FieldTooltip content="Código do órgão no Sistema Integrado de Administração de Serviços Gerais" />
-                                </div>
-                                <Input
-                                    id="codigoSiasg"
-                                    value={formData.codigoSiasg}
-                                    onChange={(e) =>
-                                        setFormData({ ...formData, codigoSiasg: e.target.value.replace(/\D/g, '').substring(0, 6) })
-                                    }
-                                    maxLength={6}
-                                    placeholder="000000"
-                                />
-                            </div>
-                        </div>
-
-                        {/* UG TCE e UG SIAFEM/SIGEF */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <div className="flex items-center gap-1">
-                                    <Label htmlFor="ugTce">UG TCE</Label>
-                                    <FieldTooltip content="Código da Unidade Gestora no Tribunal de Contas do Estado" />
-                                </div>
-                                <Input
-                                    id="ugTce"
-                                    value={formData.ugTce}
-                                    onChange={(e) =>
-                                        setFormData({ ...formData, ugTce: e.target.value.replace(/\D/g, '').substring(0, 5) })
-                                    }
-                                    maxLength={5}
-                                    placeholder="00000"
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <div className="flex items-center gap-1">
-                                    <Label htmlFor="ugSiafemSigef">UG SIAFEM/SIGEF</Label>
-                                    <FieldTooltip content="Código da Unidade Gestora no SIAFEM ou SIGEF" />
-                                </div>
-                                <Input
-                                    id="ugSiafemSigef"
-                                    value={formData.ugSiafemSigef}
-                                    onChange={(e) =>
-                                        setFormData({ ...formData, ugSiafemSigef: e.target.value.replace(/\D/g, '').substring(0, 6) })
-                                    }
-                                    maxLength={6}
-                                    placeholder="000000"
                                 />
                             </div>
                         </div>
