@@ -78,49 +78,23 @@ export const documentosService = {
      * Ex: subcategoria "4.1. Dispensa" com 2 docs existentes -> retorna "4.1.3."
      */
     async gerarProximoCodigo(subcategoriaId: string): Promise<string> {
-        const supabase = getSupabaseClient();
+        try {
+            const supabase = getSupabaseClient();
 
-        // 1. Buscar nome da subcategoria (com campo codigo se disponível)
-        const { data: subcat, error: subcatError } = await supabase
-            .from('subcategorias_documentos')
-            .select('nome, codigo')
-            .eq('id', subcategoriaId)
-            .single();
+            const { data, error } = await supabase.rpc('gerar_codigo_documento', {
+                p_subcategoria_id: subcategoriaId
+            });
 
-        if (subcatError || !subcat) {
-            // Fallback: gerar número sequencial simples
-            const fallbackSeq = Date.now().toString().slice(-4);
-            return `DOC-${fallbackSeq}`;
+            if (error) {
+                console.error('Erro RPC ao gerar código de documento:', error);
+                throw error;
+            }
+
+            return data as string;
+        } catch (err) {
+            console.error('Erro inesperado ao gerar código de documento:', err);
+            throw err;
         }
-
-        // 2. Extrair o prefixo da subcategoria (ex: "4.1" de "4.1. Nome")
-        const prefixo = subcat.codigo || extrairPrefixoSubcategoria(subcat.nome);
-
-        if (!prefixo) {
-            // Sem prefixo numérico, usar contagem simples
-            const { count } = await supabase
-                .from(TABLE_NAME)
-                .select('*', { count: 'exact', head: true })
-                .eq('subcategoria_id', subcategoriaId)
-                .eq('excluido', false);
-
-            const seq = (count || 0) + 1;
-            return `${seq}`;
-        }
-
-        // 3. Contar documentos existentes nessa subcategoria (excluídos não contam)
-        const { count, error: countError } = await supabase
-            .from(TABLE_NAME)
-            .select('*', { count: 'exact', head: true })
-            .eq('subcategoria_id', subcategoriaId)
-            .eq('excluido', false);
-
-        if (countError) {
-            console.error('Erro ao contar documentos da subcategoria:', countError);
-        }
-
-        const proximoNum = (count || 0) + 1;
-        return `${prefixo}.${proximoNum}.`;
     },
 
     async listar(filtros?: { termo?: string; categoria?: string; status?: string }): Promise<IDocumentoDB[]> {

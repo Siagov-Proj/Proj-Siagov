@@ -292,8 +292,8 @@ export default function DocumentosPage() {
                                                                             key={sub.id}
                                                                             onClick={() => selecionarFiltroSidebar(cat.id, sub.id)}
                                                                             className={`text-left text-xs px-2 py-2 rounded-md transition-colors leading-tight ${isActive
-                                                                                    ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium'
-                                                                                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                                                                                ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium'
+                                                                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                                                                                 }`}
                                                                         >
                                                                             {sub.nome}
@@ -377,7 +377,8 @@ export default function DocumentosPage() {
                             <Table>
                                 <TableHeader className="bg-gray-50/50 dark:bg-gray-900/50">
                                     <TableRow className="border-b-gray-100 dark:border-b-gray-800">
-                                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 min-w-[300px]">Título do Documento</TableHead>
+                                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 w-[120px]">Código</TableHead>
+                                        <TableHead className="font-semibold text-gray-700 dark:text-gray-300 min-w-[250px]">Título do Documento</TableHead>
                                         <TableHead className="font-semibold text-gray-700 dark:text-gray-300 hidden md:table-cell min-w-[200px]">Categoria</TableHead>
                                         <TableHead className="font-semibold text-gray-700 dark:text-gray-300 hidden xl:table-cell min-w-[200px]">Subcategoria</TableHead>
                                         <TableHead className="font-semibold text-gray-700 dark:text-gray-300 text-center w-[100px]">Arquivo</TableHead>
@@ -386,7 +387,7 @@ export default function DocumentosPage() {
                                 <TableBody>
                                     {loading ? (
                                         <TableRow>
-                                            <TableCell colSpan={4} className="h-32 text-center">
+                                            <TableCell colSpan={5} className="h-32 text-center">
                                                 <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
                                                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
                                                     <span className="text-sm">Buscando documentos...</span>
@@ -395,7 +396,7 @@ export default function DocumentosPage() {
                                         </TableRow>
                                     ) : documentosFiltrados.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={4} className="h-32 text-center text-muted-foreground">
+                                            <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
                                                 Nenhum documento encontrado com os filtros selecionados.
                                             </TableCell>
                                         </TableRow>
@@ -406,13 +407,16 @@ export default function DocumentosPage() {
                                                 className="group cursor-pointer hover:bg-gray-50/70 dark:hover:bg-gray-800/50 transition-colors border-b-gray-100 dark:border-b-gray-800/60"
                                             >
                                                 <TableCell className="py-4">
+                                                    <span className="font-mono text-sm font-semibold text-primary">
+                                                        {doc.numero || '-'}
+                                                    </span>
+                                                </TableCell>
+                                                <TableCell className="py-4">
                                                     <div className="flex flex-col gap-1">
                                                         <span className="font-medium text-gray-900 dark:text-gray-100 line-clamp-2 leading-tight">
                                                             {doc.titulo}
                                                         </span>
-                                                        <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                                                            {doc.numero ? `Nº ${doc.numero}` : 'Sem Número'}
-                                                            <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600"></span>
+                                                        <span className="text-xs text-muted-foreground">
                                                             {formatDate(new Date(doc.created_at))}
                                                         </span>
                                                     </div>

@@ -1,6 +1,6 @@
 # Documentação Técnica: SIAGOV
 **Sistema Integrado de Apoio ao Governo**  
-*Versão: 0.1.0 | Última Atualização: 2026-02-06*
+*Versão: 0.1.1 | Última Atualização: 2026-03-11*
 
 ---
 
@@ -13,6 +13,10 @@ O SIAGOV centraliza e digitaliza a gestão administrativa de órgãos públicos,
 - Cadastro de credores (Pessoas Físicas e Jurídicas)
 - Controle de usuários com autenticação baseada em CPF
 - Gestão de exercícios financeiros
+- Gestão documental hierárquica com categorização por Lei/Título/Subcategoria
+- Auditoria automatizada de operações (INSERT/UPDATE/DELETE)
+- Cadastro de Leis Normativas e Títulos
+- Permissões granulares por cargo (módulo × ação)
 
 ### 1.2 Domínio
 Gestão Pública / Administração Estadual e Municipal.
@@ -28,10 +32,18 @@ Gestão Pública / Administração Estadual e Municipal.
 ### 1.4 Entidades Principais
 ```
 Instituição → Órgão → Unidade Gestora → Setor → Cargo → Usuário
+                         ↓                          ↓
+                    Ordenadores              Permissões (cargo_permissao)
                                               ↓
                                           Processo → Tramitação
                                               ↓
 Banco → Agência → Credor
+
+Lei Normativa → Título Normativo → Categoria Doc → Subcategoria Doc → Documento
+                                                                         ↓
+                                                                   Anexos / Histórico / Versões
+
+audit_logs  ← (trigger em todas as tabelas auditadas)
 ```
 
 ---
@@ -68,9 +80,17 @@ siagov-next/
 │   │   │   └── redefinir-senha/
 │   │   ├── (dashboard)/        # Route Group: área autenticada
 │   │   │   ├── cadastros/      # CRUD de entidades
+│   │   │   │   ├── orgaos/
+│   │   │   │   ├── unidades/
+│   │   │   │   ├── setores/
+│   │   │   │   ├── cargos/
+│   │   │   │   ├── credores/
+│   │   │   │   ├── normativos/
+│   │   │   │   └── categorias-documentos/
 │   │   │   ├── processos/      # Gestão de processos
 │   │   │   ├── chamados/       # Sistema de chamados
-│   │   │   ├── documentos/     # Gestão documental
+│   │   │   ├── documentos/     # Gestão documental (hierárquica)
+│   │   │   ├── auditoria/      # Logs de auditoria do sistema
 │   │   │   ├── relatorios/     # Relatórios
 │   │   │   └── configuracoes/  # Configurações
 │   │   └── auth/               # Server Actions de autenticação
@@ -98,6 +118,8 @@ siagov-next/
 | **Service Layer** | Abstração de acesso a dados por entidade |
 | **Zustand Stores** | Estado global para auth e tema |
 | **Row Level Security** | Políticas de acesso no Supabase |
+| **RPC Atômicas** | Funções PL/pgSQL com `pg_advisory_xact_lock` para geração de códigos |
+| **Audit Triggers** | Triggers automáticos para rastreabilidade de operações |
 
 ### 2.4 Autenticação
 
@@ -125,7 +147,10 @@ erDiagram
     INSTITUICOES ||--o{ ORGAOS : "possui"
     ORGAOS ||--o{ UNIDADES_GESTORAS : "possui"
     UNIDADES_GESTORAS ||--o{ SETORES : "possui"
+    UNIDADES_GESTORAS ||--o{ ORDENADORES : "gerenciados por"
     SETORES ||--o{ CARGOS : "possui"
+    CARGOS ||--o{ CARGO_PERMISSAO : "possui"
+    PERMISSOES ||--o{ CARGO_PERMISSAO : "concedida a"
     SETORES ||--o{ USUARIOS : "lotados em"
     
     BANCOS ||--o{ AGENCIAS : "possui"
@@ -134,20 +159,30 @@ erDiagram
     PROCESSOS ||--o{ TRAMITACOES : "possui"
     SETORES ||--o{ PROCESSOS : "responsável"
     
-    USUARIOS {
+    LEIS_NORMATIVAS ||--o{ TITULOS_NORMATIVOS : "possui"
+    TITULOS_NORMATIVOS ||--o{ CATEGORIAS_DOCUMENTOS : "possui"
+    CATEGORIAS_DOCUMENTOS ||--o{ SUBCATEGORIAS_DOCUMENTOS : "possui"
+    SUBCATEGORIAS_DOCUMENTOS ||--o{ DOCUMENTOS : "classifica"
+    DOCUMENTOS ||--o{ DOCUMENTO_ANEXOS : "possui"
+    PROCESSOS ||--o{ DOCUMENTOS : "vinculado a"
+    
+    AUDIT_LOGS {
         uuid id PK
-        varchar cpf UK
-        varchar nome
-        varchar email_institucional
-        varchar perfil_acesso
+        varchar table_name
+        uuid record_id
+        varchar action
+        jsonb old_data
+        jsonb new_data
+        uuid changed_by FK
     }
     
-    PROCESSOS {
+    DOCUMENTOS {
         uuid id PK
-        varchar numero UK
+        varchar numero
+        varchar titulo
         varchar tipo
+        uuid subcategoria_id FK
         varchar status
-        varchar prioridade
     }
     
     CREDORES {
@@ -170,6 +205,7 @@ erDiagram
 | `setores` | `id` | `unidade_gestora_id → unidades_gestoras` |
 | `cargos` | `id` | `setor_id → setores` |
 | `usuarios` | `id` | `setor_id → setores`, `cargo_id → cargos` |
+| `ordenadores` | `id` | `unidade_gestora_id → unidades_gestoras` |
 
 #### Processos e Tramitações
 
@@ -177,6 +213,19 @@ erDiagram
 |--------|-----------|
 | `processos` | Processos administrativos com status e prioridade |
 | `tramitacoes` | Histórico de movimentação entre setores |
+
+#### Gestão Documental
+
+| Tabela | Descrição |
+|--------|-----------|
+| `leis_normativas` | Leis base para categorização de documentos (ex: Lei 14.133/2021) |
+| `titulos_normativos` | Títulos dentro de uma lei normativa |
+| `categorias_documentos` | Categorias vinculadas a um título e a órgãos |
+| `subcategorias_documentos` | Subcategorias com prefixo numérico (ex: "4.1. Dispensa") |
+| `documentos` | Documentos gerados, com código hierárquico automático |
+| `documento_anexos` | Anexos vinculados a um documento |
+| `documento_historico` | Log de ações (criação, atualização, download) por documento |
+| `documento_versoes` | Versionamento de conteúdo de documentos |
 
 #### Financeiro
 
@@ -186,6 +235,15 @@ erDiagram
 | `agencias` | Agências bancárias |
 | `credores` | Fornecedores (PF/PJ) com dados bancários |
 | `exercicios_financeiros` | Anos fiscais por instituição |
+
+#### Auditoria e Controle de Acesso
+
+| Tabela | Descrição |
+|--------|-----------|
+| `audit_logs` | Registros automáticos de INSERT/UPDATE/DELETE com `old_data` e `new_data` |
+| `permissoes` | Definições de permissão por módulo e ação |
+| `cargo_permissao` | Associação N:N entre cargos e permissões |
+| `usuario_lotacoes` | Histórico de lotações de usuários em setores |
 
 ### 3.3 Fluxo de Tramitação
 
@@ -201,6 +259,31 @@ sequenceDiagram
     DB-->>API: Confirmação
     API-->>U: Sucesso + Nova tramitação criada
 ```
+
+### 3.4 Geração Atômica de Códigos (PL/pgSQL)
+
+A geração de códigos sequenciais é feita no banco de dados via funções RPC para evitar race conditions:
+
+| Função | Finalidade | Chamada via |
+|--------|-----------|-------------|
+| `gerar_codigo_sequencial(p_tabela, p_tamanho, p_campo_pai, p_id_pai)` | Código numérico com `padStart` para entidades do cadastro | `sequenceService.gerarProximoCodigo()` |
+| `gerar_codigo_documento(p_subcategoria_id)` | Código hierárquico (ex: `4.1.3.`) para documentos | `documentosService.gerarProximoCodigo()` |
+
+**Mecanismo de Lock:**
+```sql
+-- pg_advisory_xact_lock garante que apenas uma transação gera o código por vez
+v_lock_id := hashtext(p_tabela || COALESCE(p_id_pai::text, ''));
+PERFORM pg_advisory_xact_lock(v_lock_id);
+```
+
+### 3.5 Auditoria Automática (Triggers)
+
+Todas as tabelas críticas possuem triggers que registram automaticamente operações na tabela `audit_logs`:
+
+**Tabelas Auditadas:**
+`esferas`, `instituicoes`, `orgaos`, `unidades_gestoras`, `setores`, `cargos`, `bancos`, `agencias`, `usuarios`, `exercicios_financeiros`, `credores`, `categorias_documentos`, `subcategorias_documentos`, `documentos`, `processos`, `documento_anexos`
+
+**Campos Registrados:** `table_name`, `record_id`, `action` (INSERT/UPDATE/DELETE), `old_data`, `new_data`, `changed_by` (UUID do usuário via JWT)
 
 ---
 
@@ -221,10 +304,11 @@ sequenceDiagram
 
 | ID | Regra | Trigger | Restrição |
 |----|-------|---------|-----------|
-| **RN-ORG-01** | Código Único | Criação de qualquer entidade | Código deve ser único dentro do escopo pai |
+| **RN-ORG-01** | Código Único Atômico | Criação de qualquer entidade | Código gerado via RPC `gerar_codigo_sequencial` com lock transacional |
 | **RN-ORG-02** | Cascata de Exclusão | `DELETE` em entidade pai | Todas as entidades filhas são removidas |
 | **RN-ORG-03** | Esfera de Instituição | Criação de Instituição | Valores: `Federal`, `Estadual`, `Municipal`, `Distrital` |
-| **RN-ORG-04** | Poder Vinculado | Criação de Órgão | Obrigatório. Valores: `Executivo`, `Legislativo`, `Judiciário` |
+| **RN-ORG-04** | Poder Vinculado | Criação de Órgão | Obrigatório. Valores: `Executivo`, `Legislativo`, `Judiciário`, `Tribunal de Contas`, `Ministério Público` |
+| **RN-ORG-05** | Soft Delete | Exclusão de entidades | Registros não são removidos fisicamente; campo `excluido` é marcado como `true` |
 
 ### 4.3 Processos
 
@@ -242,6 +326,23 @@ sequenceDiagram
 | **RN-CRED-01** | Tipo de Credor | Criação | Define máscara: `Física` = CPF (14 chars), `Jurídica` = CNPJ (18 chars) |
 | **RN-CRED-02** | Conta Bancária | Domicílio Bancário | Tipos: `Corrente`, `Poupança`, `Salário` |
 | **RN-CRED-03** | Optante Simples | Edição | Se `optante_simples = true`, exibir `data_final_opcao_simples` |
+
+### 4.5 Documentos
+
+| ID | Regra | Trigger | Restrição |
+|----|-------|---------|-----------|
+| **RN-DOC-01** | Código Hierárquico | Criação de documento | Gerado via RPC `gerar_codigo_documento(subcategoria_id)` com prefixo da subcategoria (ex: `4.1.3.`) |
+| **RN-DOC-02** | Categorização Obrigatória | Criação | Todo documento deve estar vinculado a uma `categoria_id` e `subcategoria_id` |
+| **RN-DOC-03** | Status de Documento | Ciclo de vida | `Rascunho`, `Em Revisão`, `Concluído` |
+| **RN-DOC-04** | Versionamento | Atualização de conteúdo | Cada edição cria uma nova entrada em `documento_versoes` |
+| **RN-DOC-05** | Histórico de Atividade | Criação, atualização, download | Registrado automaticamente em `documento_historico` |
+
+### 4.6 Permissões
+
+| ID | Regra | Trigger | Restrição |
+|----|-------|---------|-----------|
+| **RN-PERM-01** | Granularidade | Associação cargo ↔ permissão | Permissões definidas por `módulo` × `ação` |
+| **RN-PERM-02** | Atualização Batch | `salvarPermissoesCargo` | Delete + Insert atômico para evitar estado inconsistente |
 
 ---
 
@@ -267,10 +368,12 @@ async function listar(): Promise<Entity[]> {
 
 ### 5.2 Serviços Disponíveis
 
+#### Cadastro e Hierarquia
+
 | Serviço | Entidade | Métodos Principais |
 |---------|----------|-------------------|
 | `instituicoesService` | Instituições | `listar`, `buscarPorId`, `criar`, `atualizar`, `excluir` |
-| `orgaosService` | Órgãos | `listar`, `listarPorInstituicao`, `criar`, `atualizar` |
+| `orgaosService` | Órgãos | `listar`, `listarPorInstituicao`, `criar`, `atualizar`, `contarUnidadesGestoras` |
 | `unidadesService` | Unidades Gestoras | `listar`, `listarPorOrgao`, `criar`, `atualizar` |
 | `setoresService` | Setores | `listar`, `listarPorUnidadeGestora`, `criar`, `atualizar` |
 | `cargosService` | Cargos | `listar`, `listarPorSetor`, `criar`, `atualizar` |
@@ -278,10 +381,29 @@ async function listar(): Promise<Entity[]> {
 | `bancosService` | Bancos | `listar`, `criar`, `atualizar` |
 | `agenciasService` | Agências | `listar`, `listarPorBanco`, `criar`, `atualizar` |
 | `credoresService` | Credores | `listar`, `buscarPorIdentificador`, `criar`, `atualizar` |
-| `processosService` | Processos | `listar`, `buscarPorNumero`, `criar`, `atualizar` |
+| `ordenadoresService` | Ordenadores de UG | `listar`, `criar`, `atualizar`, `excluir` |
+
+#### Processos e Documentos
+
+| Serviço | Entidade | Métodos Principais |
+|---------|----------|-------------------|
+| `processosService` | Processos | `listar`, `listarParaSelect`, `buscarPorNumero`, `criar`, `atualizar` |
+| `documentosService` | Documentos | `listar`, `buscarPorId`, `criar`, `atualizar`, `gerarProximoCodigo` (via RPC), `registrarDownload` |
+| `categoriasDocService` | Categorias/Subcategorias | `listarCategorias`, `listarSubcategorias`, `criar`, `atualizar` |
+| `leisNormativasService` | Leis Normativas | `listar`, `listarAtivas`, `buscarPorId`, `criar`, `atualizar`, `excluir` |
+| `titulosNormativosService` | Títulos Normativos | `listar`, `listarPorLei`, `criar`, `atualizar` |
+
+#### Infraestrutura e Controle
+
+| Serviço | Entidade | Métodos Principais |
+|---------|----------|-------------------|
+| `sequenceService` | Códigos Sequenciais | `gerarProximoCodigo` (via RPC `gerar_codigo_sequencial`) |
+| `auditService` | Logs de Auditoria | `listarLogs`, `listarTodosLogs` (com paginação e filtros) |
+| `permissoesService` | Permissões | `listar`, `listarPorCargo`, `salvarPermissoesCargo`, `listarPermissoesPorCargos` |
+| `lotacoesService` | Lotações de Usuário | `listar`, `criar`, `atualizar` |
 | `exerciciosService` | Exercícios Financeiros | `listar`, `buscarAtivo`, `criar` |
 | `chamadosService` | Chamados | `listar`, `criar`, `atualizar` |
-| `documentosService` | Documentos | `listar`, `criar`, `atualizar` |
+| `configuracoesService` | Configurações | `listar`, `atualizar` |
 
 ---
 
@@ -339,6 +461,8 @@ export async function minhaAction(data: FormData) {
 - [ ] Manter consistência visual usando componentes de `src/components/ui`
 - [ ] Atualizar schema SQL em `supabase/schema.sql` para mudanças de banco
 - [ ] Criar migrações em `supabase/migrations/` para alterações incrementais
+- [ ] Usar `supabase.rpc()` para funções atômicas de geração de código, nunca gerar IDs sequenciais no frontend
+- [ ] Verificar se a tabela alvo está na lista de auditoria em `008_audit_logs.sql`
 
 ### 6.6 Variáveis de Ambiente
 
@@ -415,7 +539,24 @@ sequenceDiagram
 | **Credor** | Fornecedor (PF ou PJ) para pagamentos |
 | **Tramitação** | Movimentação de processo entre setores |
 | **Exercício Financeiro** | Ano fiscal vigente para operações |
+| **Lei Normativa** | Lei que fundamenta categorias de documentos (ex: Lei 14.133/2021) |
+| **Título Normativo** | Seção/título dentro de uma lei normativa |
+| **Categoria de Documento** | Classificação de documentos dentro de um título, vinculada a órgãos |
+| **Subcategoria de Documento** | Classificação granular com prefixo numérico (ex: "4.1. Dispensa") |
+| **Código Hierárquico** | Numeração automática de documentos no formato `prefixo.sequencial.` (ex: `4.1.3.`) |
+| **Advisory Lock** | Mecanismo PostgreSQL (`pg_advisory_xact_lock`) para evitar race conditions |
+| **Audit Log** | Registro automático de operações INSERT/UPDATE/DELETE via triggers |
+| **Ordenador** | Responsável com autoridade de gestão vinculado a uma Unidade Gestora |
 
 ---
 
-*Documentação gerada para consumo por agentes de IA em 2026-02-06.*
+## 9. Histórico de Versões
+
+| Versão | Data | Descrição |
+|--------|------|-----------|
+| 0.1.0 | 2026-02-06 | Versão inicial com cadastros base, processos, tramitações e autenticação |
+| 0.1.1 | 2026-03-11 | Gestão documental hierárquica, auditoria automática, geração atômica de códigos (PL/pgSQL), permissões por cargo, credores reestruturados, normativos |
+
+---
+
+*Documentação gerada para consumo por agentes de IA. Última atualização: 2026-03-11.*

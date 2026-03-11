@@ -40,7 +40,8 @@ import {
     Loader2,
     Shield,
     RefreshCw,
-    PlusCircle
+    PlusCircle,
+    Hash
 } from 'lucide-react';
 import { formatDate, formatDateTimeBR } from '@/utils/formatters';
 
@@ -177,7 +178,20 @@ export default function DetalheDocumentoPage() {
             </div>
 
             {/* Cards de Informações */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                <Card>
+                    <CardContent className="pt-4">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-indigo-500/10 rounded-lg">
+                                <Hash className="h-5 w-5 text-indigo-500" />
+                            </div>
+                            <div>
+                                <p className="text-sm text-muted-foreground">Código</p>
+                                <p className="font-mono font-bold text-lg text-primary">{documento.numero || '-'}</p>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
                 <Card>
                     <CardContent className="pt-4">
                         <div className="flex items-center gap-3">

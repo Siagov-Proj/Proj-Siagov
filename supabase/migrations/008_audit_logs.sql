@@ -79,7 +79,10 @@ BEGIN
         'exercicios_financeiros',
         'credores',
         'categorias_documentos',
-        'subcategorias_documentos'
+        'subcategorias_documentos',
+        'documentos',
+        'processos',
+        'documento_anexos'
     ]
     LOOP
         EXECUTE format('DROP TRIGGER IF EXISTS audit_%s ON %s', t, t);

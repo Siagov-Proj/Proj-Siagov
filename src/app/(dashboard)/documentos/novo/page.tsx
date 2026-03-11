@@ -24,7 +24,7 @@ import {
 // import { ActionBar } from '@/components/ui/action-bar'; // Removed unused
 import { FieldTooltip } from '@/components/ui/field-tooltip';
 // import { Badge } from '@/components/ui/badge'; // Removed unused
-import { ArrowLeft, FileText, Upload, X, Sparkles, Brain, Target, FileUp } from 'lucide-react';
+import { ArrowLeft, FileText, Upload, X, Sparkles, Brain, Target, FileUp, Hash, Loader2 } from 'lucide-react';
 
 // Services
 import { documentosService } from '@/services/api/documentosService';
@@ -85,6 +85,8 @@ export default function NovoDocumentoPage() {
     const [erros, setErros] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(false);
     const [gerando, setGerando] = useState(false);
+    const [codigoPreview, setCodigoPreview] = useState<string>('');
+    const [loadingCodigo, setLoadingCodigo] = useState(false);
 
     // Data Sources
     const [categorias, setCategorias] = useState<ICategoriaDocumentoDB[]>([]);
@@ -101,7 +103,30 @@ export default function NovoDocumentoPage() {
         } else {
             setSubcategorias([]);
         }
+        // Limpar código ao trocar de categoria
+        setCodigoPreview('');
     }, [formData.categoriaId]);
+
+    // Gerar preview do código ao selecionar subcategoria
+    useEffect(() => {
+        const gerarPreview = async () => {
+            if (formData.subcategoriaId) {
+                try {
+                    setLoadingCodigo(true);
+                    const codigo = await documentosService.gerarProximoCodigo(formData.subcategoriaId);
+                    setCodigoPreview(codigo);
+                } catch (err) {
+                    console.error('Erro ao gerar preview do código:', err);
+                    setCodigoPreview('');
+                } finally {
+                    setLoadingCodigo(false);
+                }
+            } else {
+                setCodigoPreview('');
+            }
+        };
+        gerarPreview();
+    }, [formData.subcategoriaId]);
 
     const loadInitialData = async () => {
         try {
@@ -439,6 +464,27 @@ export default function NovoDocumentoPage() {
                             </Select>
                             {erros.subcategoriaId && <p className="text-sm text-red-500">{erros.subcategoriaId}</p>}
                         </div>
+
+                        {/* Preview do Código Auto-Gerado */}
+                        {(codigoPreview || loadingCodigo) && (
+                            <div className="md:col-span-2 mt-2">
+                                <div className="flex items-center gap-3 p-3 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                                    <div className="p-1.5 bg-green-100 dark:bg-green-800/50 rounded">
+                                        <Hash className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-green-700 dark:text-green-400 font-medium">Código do Documento (auto-gerado)</p>
+                                        {loadingCodigo ? (
+                                            <p className="text-sm text-green-600 dark:text-green-300 flex items-center gap-1">
+                                                <Loader2 className="h-3 w-3 animate-spin" /> Gerando código...
+                                            </p>
+                                        ) : (
+                                            <p className="text-lg font-mono font-bold text-green-800 dark:text-green-200">{codigoPreview}</p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
 

@@ -23,43 +23,22 @@ export async function gerarProximoCodigo(
     try {
         const supabase = getSupabaseClient();
 
-        let query = supabase
-            .from(tabela)
-            .select('codigo')
-            .eq('excluido', false)
-            .order('codigo', { ascending: false })
-            .limit(1);
-
-        // Filtra pelo pai quando a relação é hierárquica
-        if (campoPai && idPai) {
-            query = query.eq(campoPai, idPai);
-        }
-
-        const { data, error } = await query;
+        const { data, error } = await supabase.rpc('gerar_codigo_sequencial', {
+            p_tabela: tabela,
+            p_tamanho: tamanhoCodigo,
+            p_campo_pai: campoPai || null,
+            p_id_pai: idPai || null
+        });
 
         if (error) {
-            console.error(`Erro ao buscar último código de ${tabela}:`, error);
-            return '1'.padStart(tamanhoCodigo, '0');
+            console.error(`Erro RPC ao gerar código para ${tabela}:`, error);
+            throw error;
         }
 
-        if (!data || data.length === 0) {
-            // Nenhum registro encontrado, começa do 1
-            return '1'.padStart(tamanhoCodigo, '0');
-        }
-
-        // Pega o maior código, incrementa +1
-        const ultimoCodigo = data[0].codigo;
-        const numero = parseInt(ultimoCodigo, 10);
-
-        if (isNaN(numero)) {
-            return '1'.padStart(tamanhoCodigo, '0');
-        }
-
-        const proximoNumero = numero + 1;
-        return String(proximoNumero).padStart(tamanhoCodigo, '0');
+        return data as string;
     } catch (err) {
         console.error(`Erro inesperado ao gerar código para ${tabela}:`, err);
-        return '1'.padStart(tamanhoCodigo, '0');
+        throw err;
     }
 }
 
