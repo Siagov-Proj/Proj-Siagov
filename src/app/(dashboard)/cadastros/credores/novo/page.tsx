@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
     Select,
@@ -19,16 +18,29 @@ import {
     TabsList,
     TabsTrigger,
 } from '@/components/ui/tabs';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ActionBar } from '@/components/ui/action-bar';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { maskCnpj, maskCpf, maskCep, maskTelefone, maskNitPisPasep, maskInscricaoEstadual } from '@/utils/masks';
-import { TIPOS_CREDOR, TIPOS_CONTA_BANCARIA, ESTADOS_BRASIL, FIELD_LIMITS } from '@/utils/constants';
+import { TIPOS_CREDOR, TIPOS_CONTA_BANCARIA, ESTADOS_BRASIL } from '@/utils/constants';
 import type { ICredor } from '@/types';
 import { credoresService } from '@/services/api/credoresService';
 import { bancosService, IBancoDB } from '@/services/api/bancosService';
-import { agenciasService, IAgenciaDB } from '@/services/api/agenciasService';
+
+import { z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm } from 'react-hook-form';
+import { useSafeSubmit } from '@/hooks/useSafeSubmit';
+import { toast } from 'sonner';
+import {
+    Form,
+    FormControl,
+    FormField,
+    FormItem,
+    FormLabel,
+    FormMessage,
+} from '@/components/ui/form';
 
 // Opções de Cadastro RFB
 const CADASTRO_RFB_OPTIONS = [
@@ -63,213 +75,253 @@ const OPTANTE_OPTIONS = [
     { value: 'Não', label: 'Não' },
 ];
 
-const formDataVazio = {
-    tipoCredor: '' as ICredor['tipoCredor'] | '',
-    cadastroRfb: '',
-    identificador: '',
-    nome: '',
-    nomeFantasia: '',
-    inscricaoEstadual: '',
-    inscricaoMunicipal: '',
-    nitPisPasep: '',
-    optanteSimples: '',
-    dataFinalOpcaoSimples: '',
-    optanteCprb: '',
-    dataFinalOpcaoCprb: '',
-    cpfAdministrador: '',
-    nomeAdministrador: '',
-    // Endereço
-    cep: '',
-    logradouro: '',
-    numero: '',
-    complemento: '',
-    bairro: '',
-    municipio: '',
-    uf: '',
-    caixaPostal: '',
-    pontoReferencia: '',
-    // Contato
-    telefone: '',
-    telefoneComercial2: '',
-    telefoneResidencial: '',
-    celular: '',
-    email: '',
-    email2: '',
-    site: '',
-    // Bancários
-    bancoId: '',
-    agencia: '',
-    conta: '',
-    tipoConta: '' as ICredor['tipoContaBancaria'] | '',
-    // Complementares
-    situacaoCadastral: '',
-    dataSituacaoCadastral: '',
-    dataAberturaCnpj: '',
-    porteEstabelecimento: '',
-    observacoes: '',
-    inativo: false,
-    bloqueado: false,
-};
+// Zod Schema para Validação
+const credorSchema = z.object({
+    tipoCredor: z.enum(['Física', 'Jurídica'], {
+        message: 'Tipo de Credor é obrigatório',
+    }),
+    cadastroRfb: z.string().optional(),
+    identificador: z.string().min(1, 'Identificador é obrigatório'),
+    nome: z.string().min(1, 'Nome / Razão Social é obrigatório'),
+    nomeFantasia: z.string().optional(),
+    inscricaoEstadual: z.string().optional(),
+    inscricaoMunicipal: z.string().optional(),
+    nitPisPasep: z.string().optional(),
+    optanteSimples: z.string().optional(),
+    dataFinalOpcaoSimples: z.string().optional(),
+    optanteCprb: z.string().optional(),
+    dataFinalOpcaoCprb: z.string().optional(),
+    cpfAdministrador: z.string().optional(),
+    nomeAdministrador: z.string().optional(),
+    cep: z.string().optional(),
+    logradouro: z.string().optional(),
+    numero: z.string().optional(),
+    complemento: z.string().optional(),
+    bairro: z.string().optional(),
+    municipio: z.string().optional(),
+    uf: z.string().optional(),
+    caixaPostal: z.string().optional(),
+    pontoReferencia: z.string().optional(),
+    telefone: z.string().optional(),
+    telefoneComercial2: z.string().optional(),
+    telefoneResidencial: z.string().optional(),
+    celular: z.string().optional(),
+    email: z.string().email('E-mail inválido').optional().or(z.literal('')),
+    email2: z.string().email('E-mail inválido').optional().or(z.literal('')),
+    site: z.string().optional(),
+    bancoId: z.string().optional(),
+    agencia: z.string().optional(),
+    conta: z.string().optional(),
+    tipoConta: z.string().optional(),
+    situacaoCadastral: z.string().optional(),
+    dataSituacaoCadastral: z.string().optional(),
+    dataAberturaCnpj: z.string().optional(),
+    porteEstabelecimento: z.string().optional(),
+    observacoes: z.string().optional(),
+    inativo: z.boolean(),
+    bloqueado: z.boolean(),
+}).superRefine((data, ctx) => {
+    if (data.tipoCredor === 'Jurídica' && data.identificador.replace(/\D/g, '').length !== 14) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['identificador'],
+            message: 'CNPJ inválido (deve conter 14 dígitos)',
+        });
+    }
+    if (data.tipoCredor === 'Física' && data.identificador.replace(/\D/g, '').length !== 11) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['identificador'],
+            message: 'CPF inválido (deve conter 11 dígitos)',
+        });
+    }
+});
+
+type CredorFormValues = z.infer<typeof credorSchema>;
 
 export default function NovoCredorPage() {
     const router = useRouter();
-    const [formData, setFormData] = useState(formDataVazio);
-    const [erros, setErros] = useState<Record<string, string>>({});
     const [abaAtiva, setAbaAtiva] = useState('identificacao');
-    const [saving, setSaving] = useState(false);
     const [bancos, setBancos] = useState<IBancoDB[]>([]);
     const [loadingBancos, setLoadingBancos] = useState(true);
 
     useEffect(() => {
-        carregarBancos();
+        const fetchBancos = async () => {
+            try {
+                const response = await bancosService.listar();
+                setBancos(response);
+            } catch (error) {
+                console.error('Erro ao carregar bancos:', error);
+            } finally {
+                setLoadingBancos(false);
+            }
+        };
+        fetchBancos();
     }, []);
 
-    const carregarBancos = async () => {
+    const form = useForm<CredorFormValues>({
+        resolver: zodResolver(credorSchema),
+        defaultValues: {
+            tipoCredor: undefined as any,
+            cadastroRfb: '',
+            identificador: '',
+            nome: '',
+            nomeFantasia: '',
+            inscricaoEstadual: '',
+            inscricaoMunicipal: '',
+            nitPisPasep: '',
+            optanteSimples: '',
+            dataFinalOpcaoSimples: '',
+            optanteCprb: '',
+            dataFinalOpcaoCprb: '',
+            cpfAdministrador: '',
+            nomeAdministrador: '',
+            cep: '',
+            logradouro: '',
+            numero: '',
+            complemento: '',
+            bairro: '',
+            municipio: '',
+            uf: '',
+            caixaPostal: '',
+            pontoReferencia: '',
+            telefone: '',
+            telefoneComercial2: '',
+            telefoneResidencial: '',
+            celular: '',
+            email: '',
+            email2: '',
+            site: '',
+            bancoId: '',
+            agencia: '',
+            conta: '',
+            tipoConta: '',
+            situacaoCadastral: '',
+            dataSituacaoCadastral: '',
+            dataAberturaCnpj: '',
+            porteEstabelecimento: '',
+            observacoes: '',
+            inativo: false,
+            bloqueado: false,
+        },
+    });
+
+    const formValues = form.watch();
+
+    const { safeSubmit, isSaving } = useSafeSubmit(async (data: CredorFormValues) => {
         try {
-            setLoadingBancos(true);
-            const data = await bancosService.listar();
-            setBancos(data);
-        } catch (error) {
-            console.error('Erro ao carregar bancos:', error);
-        } finally {
-            setLoadingBancos(false);
-        }
-    };
+            const commonData: Partial<ICredor> = {
+                tipoCredor: data.tipoCredor as ICredor['tipoCredor'],
+                cadastroRfb: data.cadastroRfb,
+                identificador: data.identificador,
+                nome: data.nome,
+                nomeFantasia: data.nomeFantasia,
+                inscricaoEstadual: data.inscricaoEstadual,
+                inscricaoMunicipal: data.inscricaoMunicipal,
+                nitPisPasep: data.nitPisPasep,
+                email: data.email,
+                email2: data.email2,
+                telefoneComercial: data.telefone,
+                telefoneComercial2: data.telefoneComercial2,
+                telefoneResidencial: data.telefoneResidencial,
+                telefoneCelular: data.celular,
+                site: data.site,
+                cep: data.cep,
+                logradouro: data.logradouro,
+                numero: data.numero,
+                complemento: data.complemento,
+                bairro: data.bairro,
+                municipio: data.municipio,
+                uf: data.uf,
+                caixaPostal: data.caixaPostal,
+                pontoReferencia: data.pontoReferencia,
+                bancoId: data.bancoId,
+                agencia: data.agencia,
+                contaBancaria: data.conta,
+                tipoContaBancaria: data.tipoConta as ICredor['tipoContaBancaria'],
+                optanteSimples: data.optanteSimples === 'Sim',
+                dataFinalOpcaoSimples: data.dataFinalOpcaoSimples ? new Date(data.dataFinalOpcaoSimples) : undefined,
+                optanteCprb: data.optanteCprb === 'Sim',
+                dataFinalOpcaoCprb: data.dataFinalOpcaoCprb ? new Date(data.dataFinalOpcaoCprb) : undefined,
+                cpfAdministrador: data.cpfAdministrador,
+                nomeAdministrador: data.nomeAdministrador,
+                porteEstabelecimento: data.porteEstabelecimento,
+                dataAberturaCnpj: data.dataAberturaCnpj ? new Date(data.dataAberturaCnpj) : undefined,
+                situacaoCadastral: data.situacaoCadastral,
+                dataSituacaoCadastral: data.dataSituacaoCadastral ? new Date(data.dataSituacaoCadastral) : undefined,
+                observacao: data.observacoes,
+                inativo: data.inativo,
+                bloqueado: data.bloqueado,
+            };
 
-    const validar = (): boolean => {
-        const novosErros: Record<string, string> = {};
-
-        if (!formData.tipoCredor) novosErros.tipo = 'Tipo de Credor é obrigatório';
-        if (!formData.identificador) novosErros.cpfCnpj = 'Identificador é obrigatório';
-        if (!formData.nome) novosErros.nome = 'Nome/Razão Social é obrigatório';
-
-        if (formData.tipoCredor === 'Jurídica' && formData.identificador.length !== 18) {
-            novosErros.cpfCnpj = 'CNPJ inválido';
-        }
-        if (formData.tipoCredor === 'Física' && formData.identificador.length !== 14) {
-            novosErros.cpfCnpj = 'CPF inválido';
-        }
-
-        setErros(novosErros);
-
-        if (Object.keys(novosErros).length > 0) {
-            if (novosErros.tipo || novosErros.cpfCnpj || novosErros.nome) {
-                setAbaAtiva('identificacao');
-            }
-        }
-
-        return Object.keys(novosErros).length === 0;
-    };
-
-    const handleSalvar = async () => {
-        if (!validar()) return;
-
-        setSaving(true);
-
-        const commonData: Partial<ICredor> = {
-            tipoCredor: formData.tipoCredor as ICredor['tipoCredor'],
-            cadastroRfb: formData.cadastroRfb,
-            identificador: formData.identificador,
-            nome: formData.nome,
-            nomeFantasia: formData.nomeFantasia,
-            inscricaoEstadual: formData.inscricaoEstadual,
-            inscricaoMunicipal: formData.inscricaoMunicipal,
-            nitPisPasep: formData.nitPisPasep,
-            email: formData.email,
-            email2: formData.email2,
-            telefoneComercial: formData.telefone,
-            telefoneComercial2: formData.telefoneComercial2,
-            telefoneResidencial: formData.telefoneResidencial,
-            telefoneCelular: formData.celular,
-            site: formData.site,
-            cep: formData.cep,
-            logradouro: formData.logradouro,
-            numero: formData.numero,
-            complemento: formData.complemento,
-            bairro: formData.bairro,
-            municipio: formData.municipio,
-            uf: formData.uf,
-            caixaPostal: formData.caixaPostal,
-            pontoReferencia: formData.pontoReferencia,
-            bancoId: formData.bancoId,
-            agencia: formData.agencia,
-            contaBancaria: formData.conta,
-            tipoContaBancaria: formData.tipoConta as ICredor['tipoContaBancaria'],
-            optanteSimples: formData.optanteSimples === 'Sim',
-            dataFinalOpcaoSimples: formData.dataFinalOpcaoSimples ? new Date(formData.dataFinalOpcaoSimples) : undefined,
-            optanteCprb: formData.optanteCprb === 'Sim',
-            dataFinalOpcaoCprb: formData.dataFinalOpcaoCprb ? new Date(formData.dataFinalOpcaoCprb) : undefined,
-            cpfAdministrador: formData.cpfAdministrador,
-            nomeAdministrador: formData.nomeAdministrador,
-            porteEstabelecimento: formData.porteEstabelecimento,
-            dataAberturaCnpj: formData.dataAberturaCnpj ? new Date(formData.dataAberturaCnpj) : undefined,
-            situacaoCadastral: formData.situacaoCadastral,
-            dataSituacaoCadastral: formData.dataSituacaoCadastral ? new Date(formData.dataSituacaoCadastral) : undefined,
-            observacao: formData.observacoes,
-            inativo: formData.inativo,
-            bloqueado: formData.bloqueado,
-        };
-
-        try {
             await credoresService.criar(commonData as Omit<ICredor, 'id' | 'createdAt' | 'updatedAt'>);
-            alert('Credor cadastrado com sucesso!');
+            toast.success('Credor cadastrado com sucesso!');
             router.push('/cadastros/credores');
         } catch (error) {
             console.error('Erro ao salvar:', error);
-            alert('Erro ao salvar credor. Verifique o console para mais detalhes.');
-        } finally {
-            setSaving(false);
+            toast.error('Erro ao salvar credor. Verifique o console para mais detalhes.');
         }
-    };
+    });
+
+    const onSubmit = form.handleSubmit(
+        (data) => safeSubmit(data),
+        (errors) => {
+            console.log("Erros de validação:", errors);
+            if (errors.tipoCredor || errors.identificador || errors.nome) {
+                setAbaAtiva('identificacao');
+            }
+            toast.error("Preencha todos os campos obrigatórios corretamente.");
+        }
+    );
 
     const handleCancelar = () => {
         router.back();
     };
 
     const handleLimpar = () => {
-        setFormData(formDataVazio);
-        setErros({});
+        form.reset();
     };
 
     const aplicarMascaraDocumento = (valor: string) => {
-        if (formData.tipoCredor === 'Física') {
+        if (formValues.tipoCredor === 'Física') {
             return maskCpf(valor);
         }
         return maskCnpj(valor);
     };
 
     const CharCount = ({ value, max }: { value: string; max: number }) => (
-        <p className="text-xs text-muted-foreground text-right mt-1">{value.length}/{max} caracteres</p>
+        <p className="text-xs text-muted-foreground text-right mt-1">{value?.length || 0}/{max} caracteres</p>
     );
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-center gap-4">
-                <Button variant="outline" size="icon" onClick={handleCancelar}>
-                    <ArrowLeft className="h-4 w-4" />
-                </Button>
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight">Incluir Novo Credor</h1>
-                    <p className="text-muted-foreground">
-                        Preencha os dados do credor
-                    </p>
+        <Form {...form}>
+            <form onSubmit={onSubmit} className="space-y-6">
+                <div className="flex items-center gap-4">
+                    <Button type="button" variant="outline" size="icon" onClick={handleCancelar}>
+                        <ArrowLeft className="h-4 w-4" />
+                    </Button>
+                    <div>
+                        <h1 className="text-2xl font-bold tracking-tight">Incluir Novo Credor</h1>
+                        <p className="text-muted-foreground">
+                            Preencha os dados do credor
+                        </p>
+                    </div>
                 </div>
-            </div>
 
-            <Card>
-                <CardContent className="pt-6">
-                    <Tabs value={abaAtiva} onValueChange={setAbaAtiva}>
-                        <TabsList className="grid w-full grid-cols-5 mb-6">
-                            <TabsTrigger value="identificacao">01 - Identificação</TabsTrigger>
-                            <TabsTrigger value="endereco">02 - Endereço</TabsTrigger>
-                            <TabsTrigger value="contato">03 - Contato</TabsTrigger>
-                            <TabsTrigger value="bancarios">04 - Dados Bancários</TabsTrigger>
-                            <TabsTrigger value="complementares">05 - Complementares</TabsTrigger>
-                        </TabsList>
+                <Card>
+                    <CardContent className="pt-6">
+                        <Tabs value={abaAtiva} onValueChange={setAbaAtiva}>
+                            <TabsList className="grid w-full grid-cols-5 mb-6">
+                                <TabsTrigger value="identificacao">01 - Identificação</TabsTrigger>
+                                <TabsTrigger value="endereco">02 - Endereço</TabsTrigger>
+                                <TabsTrigger value="contato">03 - Contato</TabsTrigger>
+                                <TabsTrigger value="bancarios">04 - Dados Bancários</TabsTrigger>
+                                <TabsTrigger value="complementares">05 - Complementares</TabsTrigger>
+                            </TabsList>
 
                         {/* ===== ABA 01 - IDENTIFICAÇÃO ===== */}
                         <TabsContent value="identificacao" className="space-y-8">
-                            {/* Seção: Dados Básicos */}
+                            {/* Dados Básicos */}
                             <Card>
                                 <CardHeader className="pb-4">
                                     <CardTitle className="text-base flex items-center gap-2">
@@ -277,151 +329,197 @@ export default function NovoCredorPage() {
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
-                                    {/* Tipo de Credor, Cadastro RFB, Identificador */}
                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Tipo de Credor<span className="text-red-500 ml-1">*</span></Label>
-                                                <FieldTooltip content="Pessoa Física ou Jurídica" />
-                                            </div>
-                                            <Select
-                                                value={formData.tipoCredor}
-                                                onValueChange={(v) =>
-                                                    setFormData({ ...formData, tipoCredor: v as ICredor['tipoCredor'], identificador: '' })
-                                                }
-                                            >
-                                                <SelectTrigger className={erros.tipo ? 'border-red-500' : ''}>
-                                                    <SelectValue placeholder="Selecione" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {TIPOS_CREDOR.map((t) => (
-                                                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                            {erros.tipo && <p className="text-sm text-red-500">{erros.tipo}</p>}
-                                        </div>
+                                        <FormField
+                                            control={form.control}
+                                            name="tipoCredor"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Tipo de Credor<span className="text-red-500 ml-1">*</span></FormLabel>
+                                                        <FieldTooltip content="Pessoa Física ou Jurídica" />
+                                                    </div>
+                                                    <Select onValueChange={(val) => {
+                                                        field.onChange(val);
+                                                        form.setValue('identificador', '');
+                                                    }} value={field.value || ''}>
+                                                        <FormControl>
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="Selecione" />
+                                                            </SelectTrigger>
+                                                        </FormControl>
+                                                        <SelectContent>
+                                                            {TIPOS_CREDOR.map((t) => (
+                                                                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
 
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Cadastro RFB<span className="text-red-500 ml-1">*</span></Label>
-                                                <FieldTooltip content="Tipo de cadastro na Receita Federal do Brasil" />
-                                            </div>
-                                            <Select
-                                                value={formData.cadastroRfb}
-                                                onValueChange={(v) => setFormData({ ...formData, cadastroRfb: v })}
-                                            >
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Selecione" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {CADASTRO_RFB_OPTIONS.map((o) => (
-                                                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
+                                        <FormField
+                                            control={form.control}
+                                            name="cadastroRfb"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Cadastro RFB</FormLabel>
+                                                        <FieldTooltip content="Tipo de cadastro na Receita Federal do Brasil" />
+                                                    </div>
+                                                    <Select onValueChange={field.onChange} value={field.value || ''}>
+                                                        <FormControl>
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="Selecione" />
+                                                            </SelectTrigger>
+                                                        </FormControl>
+                                                        <SelectContent>
+                                                            {CADASTRO_RFB_OPTIONS.map((o) => (
+                                                                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
 
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Identificador<span className="text-red-500 ml-1">*</span></Label>
-                                                <FieldTooltip content="CPF ou CNPJ do credor" />
-                                            </div>
-                                            <Input
-                                                value={formData.identificador}
-                                                onChange={(e) =>
-                                                    setFormData({ ...formData, identificador: aplicarMascaraDocumento(e.target.value) })
-                                                }
-                                                disabled={!formData.tipoCredor}
-                                                maxLength={formData.tipoCredor === 'Física' ? 14 : 18}
-                                                placeholder="000.000.000-00"
-                                            />
-                                            <CharCount value={formData.identificador} max={18} />
-                                            {erros.cpfCnpj && <p className="text-sm text-red-500">{erros.cpfCnpj}</p>}
-                                        </div>
+                                        <FormField
+                                            control={form.control}
+                                            name="identificador"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Identificador<span className="text-red-500 ml-1">*</span></FormLabel>
+                                                        <FieldTooltip content="CPF ou CNPJ do credor" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input
+                                                            disabled={!formValues.tipoCredor}
+                                                            maxLength={formValues.tipoCredor === 'Física' ? 14 : 18}
+                                                            placeholder={formValues.tipoCredor === 'Física' ? "000.000.000-00" : "00.000.000/0000-00"}
+                                                            {...field}
+                                                            value={field.value || ''}
+                                                            onChange={(e) => field.onChange(aplicarMascaraDocumento(e.target.value))}
+                                                        />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={18} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
                                     </div>
 
-                                    {/* Nome / Razão Social, Nome Fantasia */}
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Nome / Razão Social<span className="text-red-500 ml-1">*</span></Label>
-                                                <FieldTooltip content="Nome completo ou razão social do credor" />
-                                            </div>
-                                            <Input
-                                                value={formData.nome}
-                                                onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                                                maxLength={200}
-                                                placeholder="Nome completo ou razão social"
-                                                className={erros.nome ? 'border-red-500' : ''}
-                                            />
-                                            <CharCount value={formData.nome} max={200} />
-                                            {erros.nome && <p className="text-sm text-red-500">{erros.nome}</p>}
-                                        </div>
+                                        <FormField
+                                            control={form.control}
+                                            name="nome"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Nome / Razão Social<span className="text-red-500 ml-1">*</span></FormLabel>
+                                                        <FieldTooltip content="Nome completo ou razão social do credor" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input maxLength={200} placeholder="Nome completo ou razão social" {...field} value={field.value || ''} />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={200} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
 
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Nome Fantasia</Label>
-                                                <FieldTooltip content="Nome fantasia da empresa (opcional)" />
-                                            </div>
-                                            <Input
-                                                value={formData.nomeFantasia}
-                                                onChange={(e) => setFormData({ ...formData, nomeFantasia: e.target.value })}
-                                                maxLength={100}
-                                                placeholder="Nome fantasia"
-                                            />
-                                            <CharCount value={formData.nomeFantasia} max={100} />
-                                        </div>
+                                        <FormField
+                                            control={form.control}
+                                            name="nomeFantasia"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Nome Fantasia</FormLabel>
+                                                        <FieldTooltip content="Nome fantasia da empresa (opcional)" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input maxLength={100} placeholder="Nome fantasia" {...field} value={field.value || ''} />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={100} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
                                     </div>
 
-                                    {/* Inscrição Estadual, Inscrição Municipal, NIT/PIS/PASEP */}
                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Inscrição Estadual</Label>
-                                                <FieldTooltip content="Número da Inscrição Estadual" />
-                                            </div>
-                                            <Input
-                                                value={formData.inscricaoEstadual}
-                                                onChange={(e) => setFormData({ ...formData, inscricaoEstadual: maskInscricaoEstadual(e.target.value) })}
-                                                maxLength={20}
-                                                placeholder="000.000.000.000"
-                                            />
-                                            <CharCount value={formData.inscricaoEstadual} max={20} />
-                                        </div>
+                                        <FormField
+                                            control={form.control}
+                                            name="inscricaoEstadual"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Inscrição Estadual</FormLabel>
+                                                        <FieldTooltip content="Número da Inscrição Estadual" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input
+                                                            maxLength={20}
+                                                            placeholder="000.000.000.000"
+                                                            {...field}
+                                                            value={field.value || ''}
+                                                            onChange={(e) => field.onChange(maskInscricaoEstadual(e.target.value))}
+                                                        />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={20} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
 
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Inscrição Municipal</Label>
-                                                <FieldTooltip content="Número da Inscrição Municipal" />
-                                            </div>
-                                            <Input
-                                                value={formData.inscricaoMunicipal}
-                                                onChange={(e) => setFormData({ ...formData, inscricaoMunicipal: e.target.value })}
-                                                maxLength={20}
-                                                placeholder="0000000"
-                                            />
-                                            <CharCount value={formData.inscricaoMunicipal} max={20} />
-                                        </div>
+                                        <FormField
+                                            control={form.control}
+                                            name="inscricaoMunicipal"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Inscrição Municipal</FormLabel>
+                                                        <FieldTooltip content="Número da Inscrição Municipal" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input maxLength={20} placeholder="0000000" {...field} value={field.value || ''} />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={20} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
 
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>NIT / PIS / PASEP</Label>
-                                                <FieldTooltip content="Número de Identificação do Trabalhador" />
-                                            </div>
-                                            <Input
-                                                value={formData.nitPisPasep}
-                                                onChange={(e) => setFormData({ ...formData, nitPisPasep: maskNitPisPasep(e.target.value) })}
-                                                maxLength={20}
-                                                placeholder="000.00000.00-0"
-                                            />
-                                            <CharCount value={formData.nitPisPasep} max={20} />
-                                        </div>
+                                        <FormField
+                                            control={form.control}
+                                            name="nitPisPasep"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>NIT / PIS / PASEP</FormLabel>
+                                                        <FieldTooltip content="Número de Identificação do Trabalhador" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input
+                                                            maxLength={20}
+                                                            placeholder="000.00000.00-0"
+                                                            {...field}
+                                                            value={field.value || ''}
+                                                            onChange={(e) => field.onChange(maskNitPisPasep(e.target.value))}
+                                                        />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={20} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
                                     </div>
                                 </CardContent>
                             </Card>
 
-                            {/* Seção: Regimes Tributários */}
+                            {/* Regimes Tributários */}
                             <Card>
                                 <CardHeader className="pb-4">
                                     <CardTitle className="text-base flex items-center gap-2">
@@ -430,76 +528,98 @@ export default function NovoCredorPage() {
                                 </CardHeader>
                                 <CardContent className="space-y-4">
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Optante Simples</Label>
-                                                <FieldTooltip content="Indicar se o credor é optante pelo Simples Nacional" />
-                                            </div>
-                                            <Select
-                                                value={formData.optanteSimples}
-                                                onValueChange={(v) => setFormData({ ...formData, optanteSimples: v })}
-                                            >
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Selecione" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {OPTANTE_OPTIONS.map((o) => (
-                                                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
+                                        <FormField
+                                            control={form.control}
+                                            name="optanteSimples"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Optante Simples</FormLabel>
+                                                        <FieldTooltip content="Indicar se o credor é optante pelo Simples Nacional" />
+                                                    </div>
+                                                    <Select onValueChange={field.onChange} value={field.value || ''}>
+                                                        <FormControl>
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="Selecione" />
+                                                            </SelectTrigger>
+                                                        </FormControl>
+                                                        <SelectContent>
+                                                            {OPTANTE_OPTIONS.map((o) => (
+                                                                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
 
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Data Final Opção Simples</Label>
-                                                <FieldTooltip content="Data de vigência final da opção pelo Simples Nacional" />
-                                            </div>
-                                            <Input
-                                                type="date"
-                                                value={formData.dataFinalOpcaoSimples}
-                                                onChange={(e) => setFormData({ ...formData, dataFinalOpcaoSimples: e.target.value })}
-                                            />
-                                        </div>
+                                        <FormField
+                                            control={form.control}
+                                            name="dataFinalOpcaoSimples"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Data Final Opção Simples</FormLabel>
+                                                        <FieldTooltip content="Data de vigência final da opção pelo Simples Nacional" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input type="date" {...field} value={field.value || ''} />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
                                     </div>
 
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Optante CPRB</Label>
-                                                <FieldTooltip content="Indicar se o credor é optante pela CPRB" />
-                                            </div>
-                                            <Select
-                                                value={formData.optanteCprb}
-                                                onValueChange={(v) => setFormData({ ...formData, optanteCprb: v })}
-                                            >
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Selecione" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {OPTANTE_OPTIONS.map((o) => (
-                                                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
+                                        <FormField
+                                            control={form.control}
+                                            name="optanteCprb"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Optante CPRB</FormLabel>
+                                                        <FieldTooltip content="Indicar se o credor é optante pela CPRB" />
+                                                    </div>
+                                                    <Select onValueChange={field.onChange} value={field.value || ''}>
+                                                        <FormControl>
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="Selecione" />
+                                                            </SelectTrigger>
+                                                        </FormControl>
+                                                        <SelectContent>
+                                                            {OPTANTE_OPTIONS.map((o) => (
+                                                                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
 
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Data Final Opção CPRB</Label>
-                                                <FieldTooltip content="Data de vigência final da opção pela CPRB" />
-                                            </div>
-                                            <Input
-                                                type="date"
-                                                value={formData.dataFinalOpcaoCprb}
-                                                onChange={(e) => setFormData({ ...formData, dataFinalOpcaoCprb: e.target.value })}
-                                            />
-                                        </div>
+                                        <FormField
+                                            control={form.control}
+                                            name="dataFinalOpcaoCprb"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Data Final Opção CPRB</FormLabel>
+                                                        <FieldTooltip content="Data de vigência final da opção pela CPRB" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input type="date" {...field} value={field.value || ''} />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
                                     </div>
                                 </CardContent>
                             </Card>
 
-                            {/* Seção: Administrador(a) Responsável */}
+                            {/* Administrador Responsável */}
                             <Card>
                                 <CardHeader className="pb-4">
                                     <CardTitle className="text-base flex items-center gap-2">
@@ -508,33 +628,47 @@ export default function NovoCredorPage() {
                                 </CardHeader>
                                 <CardContent>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>CPF do Administrador</Label>
-                                                <FieldTooltip content="CPF do administrador responsável" />
-                                            </div>
-                                            <Input
-                                                value={formData.cpfAdministrador}
-                                                onChange={(e) => setFormData({ ...formData, cpfAdministrador: maskCpf(e.target.value) })}
-                                                maxLength={14}
-                                                placeholder="000.000.000-00"
-                                            />
-                                            <CharCount value={formData.cpfAdministrador} max={14} />
-                                        </div>
+                                        <FormField
+                                            control={form.control}
+                                            name="cpfAdministrador"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>CPF do Administrador</FormLabel>
+                                                        <FieldTooltip content="CPF do administrador responsável" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input
+                                                            maxLength={14}
+                                                            placeholder="000.000.000-00"
+                                                            {...field}
+                                                            onChange={(e) => field.onChange(maskCpf(e.target.value))}
+                                                            value={field.value || ''}
+                                                        />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={14} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
 
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Nome do Administrador</Label>
-                                                <FieldTooltip content="Nome completo do administrador responsável" />
-                                            </div>
-                                            <Input
-                                                value={formData.nomeAdministrador}
-                                                onChange={(e) => setFormData({ ...formData, nomeAdministrador: e.target.value })}
-                                                maxLength={150}
-                                                placeholder="Nome completo"
-                                            />
-                                            <CharCount value={formData.nomeAdministrador} max={150} />
-                                        </div>
+                                        <FormField
+                                            control={form.control}
+                                            name="nomeAdministrador"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Nome do Administrador</FormLabel>
+                                                        <FieldTooltip content="Nome completo do administrador responsável" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input maxLength={150} placeholder="Nome completo" {...field} value={field.value || ''} />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={150} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
                                     </div>
                                 </CardContent>
                             </Card>
@@ -549,143 +683,177 @@ export default function NovoCredorPage() {
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
-                                    {/* CEP, Logradouro */}
                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>CEP</Label>
-                                                <FieldTooltip content="Código de Endereçamento Postal" />
-                                            </div>
-                                            <Input
-                                                value={formData.cep}
-                                                onChange={(e) => setFormData({ ...formData, cep: maskCep(e.target.value) })}
-                                                maxLength={10}
-                                                placeholder="00000-000"
-                                            />
-                                            <CharCount value={formData.cep} max={10} />
-                                        </div>
-                                        <div className="space-y-2 sm:col-span-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Logradouro</Label>
-                                                <FieldTooltip content="Rua, Avenida, Travessa, etc." />
-                                            </div>
-                                            <Input
-                                                value={formData.logradouro}
-                                                onChange={(e) => setFormData({ ...formData, logradouro: e.target.value })}
-                                                maxLength={100}
-                                                placeholder="Rua, Avenida, etc."
-                                            />
-                                            <CharCount value={formData.logradouro} max={100} />
-                                        </div>
+                                      <FormField
+                                            control={form.control}
+                                            name="cep"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>CEP</FormLabel>
+                                                        <FieldTooltip content="Código de Endereçamento Postal" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input maxLength={10} placeholder="00000-000" {...field} value={field.value || ''} onChange={(e) => field.onChange(maskCep(e.target.value))} />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={10} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="logradouro"
+                                            render={({ field }) => (
+                                                <FormItem className="sm:col-span-2">
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Logradouro</FormLabel>
+                                                        <FieldTooltip content="Rua, Avenida, Travessa, etc." />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input maxLength={100} placeholder="Rua, Avenida, etc." {...field} value={field.value || ''} />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={100} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
                                     </div>
 
-                                    {/* Número, Complemento, Bairro */}
                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Número</Label>
-                                                <FieldTooltip content="Número do endereço" />
-                                            </div>
-                                            <Input
-                                                value={formData.numero}
-                                                onChange={(e) => setFormData({ ...formData, numero: e.target.value })}
-                                                maxLength={10}
-                                                placeholder="100"
-                                            />
-                                            <CharCount value={formData.numero} max={10} />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Complemento</Label>
-                                                <FieldTooltip content="Complemento do endereço (Sala, Bloco, etc.)" />
-                                            </div>
-                                            <Input
-                                                value={formData.complemento}
-                                                onChange={(e) => setFormData({ ...formData, complemento: e.target.value })}
-                                                maxLength={50}
-                                                placeholder="Sala, Bloco, etc."
-                                            />
-                                            <CharCount value={formData.complemento} max={50} />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Bairro</Label>
-                                                <FieldTooltip content="Bairro do endereço" />
-                                            </div>
-                                            <Input
-                                                value={formData.bairro}
-                                                onChange={(e) => setFormData({ ...formData, bairro: e.target.value })}
-                                                maxLength={80}
-                                                placeholder="Nome do bairro"
-                                            />
-                                            <CharCount value={formData.bairro} max={80} />
-                                        </div>
+                                        <FormField
+                                            control={form.control}
+                                            name="numero"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Número</FormLabel>
+                                                        <FieldTooltip content="Número do endereço" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input maxLength={10} placeholder="100" {...field} value={field.value || ''} />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={10} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="complemento"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Complemento</FormLabel>
+                                                        <FieldTooltip content="Complemento do endereço" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input maxLength={50} placeholder="Sala, Bloco, etc." {...field} value={field.value || ''} />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={50} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="bairro"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Bairro</FormLabel>
+                                                        <FieldTooltip content="Bairro do endereço" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input maxLength={80} placeholder="Nome do bairro" {...field} value={field.value || ''} />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={80} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
                                     </div>
 
-                                    {/* Município, UF */}
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Município</Label>
-                                                <FieldTooltip content="Nome do município" />
-                                            </div>
-                                            <Input
-                                                value={formData.municipio}
-                                                onChange={(e) => setFormData({ ...formData, municipio: e.target.value })}
-                                                maxLength={80}
-                                                placeholder="Nome do município"
-                                            />
-                                            <CharCount value={formData.municipio} max={80} />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>UF</Label>
-                                                <FieldTooltip content="Unidade da Federação" />
-                                            </div>
-                                            <Select
-                                                value={formData.uf}
-                                                onValueChange={(v) => setFormData({ ...formData, uf: v })}
-                                            >
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Selecione a UF" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {ESTADOS_BRASIL.map((uf) => (
-                                                        <SelectItem key={uf.value} value={uf.value}>{uf.label}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
+                                        <FormField
+                                            control={form.control}
+                                            name="municipio"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Município</FormLabel>
+                                                        <FieldTooltip content="Nome do município" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input maxLength={80} placeholder="Nome do município" {...field} value={field.value || ''} />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={80} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="uf"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>UF</FormLabel>
+                                                        <FieldTooltip content="Unidade da Federação" />
+                                                    </div>
+                                                    <Select onValueChange={field.onChange} value={field.value || ''}>
+                                                        <FormControl>
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="Selecione a UF" />
+                                                            </SelectTrigger>
+                                                        </FormControl>
+                                                        <SelectContent>
+                                                            {ESTADOS_BRASIL.map((uf) => (
+                                                                <SelectItem key={uf.value} value={uf.value}>{uf.label}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
                                     </div>
 
-                                    {/* Caixa Postal, Ponto de Referência */}
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Caixa Postal</Label>
-                                                <FieldTooltip content="Número da Caixa Postal" />
-                                            </div>
-                                            <Input
-                                                value={formData.caixaPostal}
-                                                onChange={(e) => setFormData({ ...formData, caixaPostal: e.target.value })}
-                                                maxLength={20}
-                                                placeholder="Caixa Postal"
-                                            />
-                                            <CharCount value={formData.caixaPostal} max={20} />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Ponto de Referência</Label>
-                                                <FieldTooltip content="Ponto de referência para facilitar a localização" />
-                                            </div>
-                                            <Input
-                                                value={formData.pontoReferencia}
-                                                onChange={(e) => setFormData({ ...formData, pontoReferencia: e.target.value })}
-                                                maxLength={200}
-                                                placeholder="Ponto de referência"
-                                            />
-                                            <CharCount value={formData.pontoReferencia} max={200} />
-                                        </div>
+                                        <FormField
+                                            control={form.control}
+                                            name="caixaPostal"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Caixa Postal</FormLabel>
+                                                        <FieldTooltip content="Número da Caixa Postal" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input maxLength={20} placeholder="Caixa Postal" {...field} value={field.value || ''} />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={20} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="pontoReferencia"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Ponto de Referência</FormLabel>
+                                                        <FieldTooltip content="Ponto de referência para facilitar a localização" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input maxLength={200} placeholder="Ponto de referência" {...field} value={field.value || ''} />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={200} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
                                     </div>
                                 </CardContent>
                             </Card>
@@ -700,111 +868,135 @@ export default function NovoCredorPage() {
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
-                                    {/* Telefone Comercial 1, Telefone Comercial 2 */}
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Telefone Comercial 1</Label>
-                                                <FieldTooltip content="Telefone comercial principal" />
-                                            </div>
-                                            <Input
-                                                value={formData.telefone}
-                                                onChange={(e) => setFormData({ ...formData, telefone: maskTelefone(e.target.value) })}
-                                                maxLength={15}
-                                                placeholder="(00) 0000-0000"
-                                            />
-                                            <CharCount value={formData.telefone} max={15} />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Telefone Comercial 2</Label>
-                                                <FieldTooltip content="Telefone comercial secundário" />
-                                            </div>
-                                            <Input
-                                                value={formData.telefoneComercial2}
-                                                onChange={(e) => setFormData({ ...formData, telefoneComercial2: maskTelefone(e.target.value) })}
-                                                maxLength={15}
-                                                placeholder="(00) 0000-0000"
-                                            />
-                                            <CharCount value={formData.telefoneComercial2} max={15} />
-                                        </div>
-                                    </div>
-
-                                    {/* Telefone Residencial, Telefone Celular */}
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Telefone Residencial</Label>
-                                                <FieldTooltip content="Telefone residencial" />
-                                            </div>
-                                            <Input
-                                                value={formData.telefoneResidencial}
-                                                onChange={(e) => setFormData({ ...formData, telefoneResidencial: maskTelefone(e.target.value) })}
-                                                maxLength={15}
-                                                placeholder="(00) 0000-0000"
-                                            />
-                                            <CharCount value={formData.telefoneResidencial} max={15} />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Telefone Celular</Label>
-                                                <FieldTooltip content="Telefone celular" />
-                                            </div>
-                                            <Input
-                                                value={formData.celular}
-                                                onChange={(e) => setFormData({ ...formData, celular: maskTelefone(e.target.value) })}
-                                                maxLength={15}
-                                                placeholder="(00) 00000-0000"
-                                            />
-                                            <CharCount value={formData.celular} max={15} />
-                                        </div>
-                                    </div>
-
-                                    {/* E-mail Principal, E-mail Secundário */}
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>E-mail Principal</Label>
-                                                <FieldTooltip content="Endereço de e-mail principal" />
-                                            </div>
-                                            <Input
-                                                type="email"
-                                                value={formData.email}
-                                                onChange={(e) => setFormData({ ...formData, email: e.target.value.toLowerCase() })}
-                                                maxLength={100}
-                                                placeholder="email@exemplo.com"
-                                            />
-                                            <CharCount value={formData.email} max={100} />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>E-mail Secundário</Label>
-                                                <FieldTooltip content="Endereço de e-mail secundário (opcional)" />
-                                            </div>
-                                            <Input
-                                                type="email"
-                                                value={formData.email2}
-                                                onChange={(e) => setFormData({ ...formData, email2: e.target.value.toLowerCase() })}
-                                                maxLength={100}
-                                                placeholder="email2@exemplo.com"
-                                            />
-                                            <CharCount value={formData.email2} max={100} />
-                                        </div>
-                                    </div>
-
-                                    {/* Website */}
-                                    <div className="space-y-2">
-                                        <div className="flex items-center gap-1">
-                                            <Label>Website</Label>
-                                            <FieldTooltip content="Endereço do website" />
-                                        </div>
-                                        <Input
-                                            value={formData.site}
-                                            onChange={(e) => setFormData({ ...formData, site: e.target.value.toLowerCase() })}
-                                            maxLength={100}
-                                            placeholder="www.exemplo.com.br"
+                                        <FormField
+                                            control={form.control}
+                                            name="telefone"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Telefone Comercial 1</FormLabel>
+                                                        <FieldTooltip content="Telefone comercial principal" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input maxLength={15} placeholder="(00) 0000-0000" {...field} value={field.value || ''} onChange={(e) => field.onChange(maskTelefone(e.target.value))} />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={15} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
                                         />
-                                        <CharCount value={formData.site} max={100} />
+                                        <FormField
+                                            control={form.control}
+                                            name="telefoneComercial2"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Telefone Comercial 2</FormLabel>
+                                                        <FieldTooltip content="Telefone comercial secundário" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input maxLength={15} placeholder="(00) 0000-0000" {...field} value={field.value || ''} onChange={(e) => field.onChange(maskTelefone(e.target.value))} />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={15} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <FormField
+                                            control={form.control}
+                                            name="telefoneResidencial"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Telefone Residencial</FormLabel>
+                                                        <FieldTooltip content="Telefone residencial" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input maxLength={15} placeholder="(00) 0000-0000" {...field} value={field.value || ''} onChange={(e) => field.onChange(maskTelefone(e.target.value))} />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={15} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="celular"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Telefone Celular</FormLabel>
+                                                        <FieldTooltip content="Telefone celular" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input maxLength={15} placeholder="(00) 00000-0000" {...field} value={field.value || ''} onChange={(e) => field.onChange(maskTelefone(e.target.value))} />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={15} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <FormField
+                                            control={form.control}
+                                            name="email"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>E-mail Principal</FormLabel>
+                                                        <FieldTooltip content="Endereço de e-mail principal" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input type="email" maxLength={100} placeholder="email@exemplo.com" {...field} value={field.value || ''} />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={100} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="email2"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>E-mail Secundário</FormLabel>
+                                                        <FieldTooltip content="Endereço de e-mail secundário (opcional)" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input type="email" maxLength={100} placeholder="email2@exemplo.com" {...field} value={field.value || ''} />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={100} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <FormField
+                                            control={form.control}
+                                            name="site"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Website</FormLabel>
+                                                        <FieldTooltip content="Endereço do website" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input maxLength={100} placeholder="www.exemplo.com.br" {...field} value={field.value || ''} />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={100} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
                                     </div>
                                 </CardContent>
                             </Card>
@@ -819,83 +1011,97 @@ export default function NovoCredorPage() {
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
-                                    {/* Banco */}
                                     <div className="space-y-2">
-                                        <div className="flex items-center gap-1">
-                                            <Label>Banco</Label>
-                                            <FieldTooltip content="Selecione o banco" />
-                                            {loadingBancos && <Loader2 className="h-3 w-3 animate-spin" />}
-                                        </div>
-                                        <Select
-                                            value={formData.bancoId}
-                                            onValueChange={(v) => {
-                                                setFormData({
-                                                    ...formData,
-                                                    bancoId: v,
-                                                    agencia: '',
-                                                });
-                                            }}
-                                        >
-                                            <SelectTrigger className="w-full">
-                                                <SelectValue placeholder="Selecione o banco" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {bancos.map((b) => (
-                                                    <SelectItem key={b.id} value={b.id}>
-                                                        {b.codigo} - {b.nome}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
+                                        <FormField
+                                            control={form.control}
+                                            name="bancoId"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Banco</FormLabel>
+                                                        <FieldTooltip content="Selecione o banco" />
+                                                        {loadingBancos && <Loader2 className="h-3 w-3 animate-spin" />}
+                                                    </div>
+                                                    <Select onValueChange={field.onChange} value={field.value || ''}>
+                                                        <FormControl>
+                                                            <SelectTrigger className="w-full">
+                                                                <SelectValue placeholder="Selecione o banco" />
+                                                            </SelectTrigger>
+                                                        </FormControl>
+                                                        <SelectContent>
+                                                            {bancos.map((b) => (
+                                                                <SelectItem key={b.id} value={b.id}>
+                                                                    {b.codigo} - {b.nome}
+                                                                </SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
                                     </div>
 
-                                    {/* Agência, Conta Bancária, Tipo de Conta */}
                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Agência</Label>
-                                                <FieldTooltip content="Número da agência bancária" />
-                                            </div>
-                                            <Input
-                                                value={formData.agencia}
-                                                onChange={(e) => setFormData({ ...formData, agencia: e.target.value })}
-                                                maxLength={10}
-                                                placeholder="0000"
-                                            />
-                                            <CharCount value={formData.agencia} max={10} />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Conta Bancária</Label>
-                                                <FieldTooltip content="Número da conta bancária com dígito" />
-                                            </div>
-                                            <Input
-                                                value={formData.conta}
-                                                onChange={(e) => setFormData({ ...formData, conta: e.target.value })}
-                                                maxLength={20}
-                                                placeholder="00000-0"
-                                            />
-                                            <CharCount value={formData.conta} max={20} />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Tipo de Conta</Label>
-                                                <FieldTooltip content="Tipo da conta bancária" />
-                                            </div>
-                                            <Select
-                                                value={formData.tipoConta}
-                                                onValueChange={(v) => setFormData({ ...formData, tipoConta: v as ICredor['tipoContaBancaria'] })}
-                                            >
-                                                <SelectTrigger className="w-full">
-                                                    <SelectValue placeholder="Selecione" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {TIPOS_CONTA_BANCARIA.map((t) => (
-                                                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
+                                        <FormField
+                                            control={form.control}
+                                            name="agencia"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Agência</FormLabel>
+                                                        <FieldTooltip content="Número da agência bancária" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input maxLength={10} placeholder="0000" {...field} value={field.value || ''} />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={10} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="conta"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Conta Bancária</FormLabel>
+                                                        <FieldTooltip content="Número da conta bancária com dígito" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input maxLength={20} placeholder="00000-0" {...field} value={field.value || ''} />
+                                                    </FormControl>
+                                                    <CharCount value={field.value || ''} max={20} />
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="tipoConta"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Tipo de Conta</FormLabel>
+                                                        <FieldTooltip content="Tipo da conta bancária" />
+                                                    </div>
+                                                    <Select onValueChange={field.onChange} value={field.value || ''}>
+                                                        <FormControl>
+                                                            <SelectTrigger className="w-full">
+                                                                <SelectValue placeholder="Selecione" />
+                                                            </SelectTrigger>
+                                                        </FormControl>
+                                                        <SelectContent>
+                                                            {TIPOS_CONTA_BANCARIA.map((t) => (
+                                                                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
                                     </div>
                                 </CardContent>
                             </Card>
@@ -910,108 +1116,149 @@ export default function NovoCredorPage() {
                                     </CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
-                                    {/* Situação Cadastral, Data da Situação, Data Abertura CNPJ */}
                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Situação Cadastral</Label>
-                                                <FieldTooltip content="Situação cadastral do credor na Receita Federal" />
-                                            </div>
-                                            <Select
-                                                value={formData.situacaoCadastral}
-                                                onValueChange={(v) => setFormData({ ...formData, situacaoCadastral: v })}
-                                            >
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Selecione" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {SITUACAO_CADASTRAL_OPTIONS.map((o) => (
-                                                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Data da Situação</Label>
-                                                <FieldTooltip content="Data da última alteração da situação cadastral" />
-                                            </div>
-                                            <Input
-                                                type="date"
-                                                value={formData.dataSituacaoCadastral}
-                                                onChange={(e) => setFormData({ ...formData, dataSituacaoCadastral: e.target.value })}
-                                            />
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <div className="flex items-center gap-1">
-                                                <Label>Data Abertura CNPJ</Label>
-                                                <FieldTooltip content="Data de abertura/constituição da empresa" />
-                                            </div>
-                                            <Input
-                                                type="date"
-                                                value={formData.dataAberturaCnpj}
-                                                onChange={(e) => setFormData({ ...formData, dataAberturaCnpj: e.target.value })}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    {/* Porte Estabelecimento PJ */}
-                                    <div className="space-y-2">
-                                        <div className="flex items-center gap-1">
-                                            <Label>Porte Estabelecimento PJ</Label>
-                                            <FieldTooltip content="Porte do estabelecimento conforme classificação da Receita Federal" />
-                                        </div>
-                                        <Select
-                                            value={formData.porteEstabelecimento}
-                                            onValueChange={(v) => setFormData({ ...formData, porteEstabelecimento: v })}
-                                        >
-                                            <SelectTrigger className="w-full sm:w-1/3">
-                                                <SelectValue placeholder="Selecione" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {PORTE_ESTABELECIMENTO_OPTIONS.map((o) => (
-                                                    <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-
-                                    {/* Observações */}
-                                    <div className="space-y-2">
-                                        <div className="flex items-center gap-1">
-                                            <Label>Observações</Label>
-                                            <FieldTooltip content="Observações gerais sobre o credor" />
-                                        </div>
-                                        <textarea
-                                            className="min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                            value={formData.observacoes}
-                                            onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
-                                            placeholder="Observações gerais..."
+                                        <FormField
+                                            control={form.control}
+                                            name="situacaoCadastral"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Situação Cadastral</FormLabel>
+                                                        <FieldTooltip content="Situação cadastral do credor na Receita Federal" />
+                                                    </div>
+                                                    <Select onValueChange={field.onChange} value={field.value || ''}>
+                                                        <FormControl>
+                                                            <SelectTrigger>
+                                                                <SelectValue placeholder="Selecione" />
+                                                            </SelectTrigger>
+                                                        </FormControl>
+                                                        <SelectContent>
+                                                            {SITUACAO_CADASTRAL_OPTIONS.map((o) => (
+                                                                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="dataSituacaoCadastral"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Data da Situação</FormLabel>
+                                                        <FieldTooltip content="Data da última alteração da situação cadastral" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input type="date" {...field} value={field.value || ''} />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="dataAberturaCnpj"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Data Abertura CNPJ</FormLabel>
+                                                        <FieldTooltip content="Data de abertura/constituição da empresa" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <Input type="date" {...field} value={field.value || ''} />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
                                         />
                                     </div>
 
-                                    {/* Inativo / Bloqueado */}
-                                    <div className="flex items-center gap-6 pt-2">
-                                        <div className="flex items-center gap-2">
-                                            <Checkbox
-                                                id="inativo"
-                                                checked={formData.inativo}
-                                                onCheckedChange={(v) => setFormData({ ...formData, inativo: v as boolean })}
-                                            />
-                                            <Label htmlFor="inativo" className="cursor-pointer">Inativo</Label>
-                                            <FieldTooltip content="Marque se o credor estiver inativo" />
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <Checkbox
-                                                id="bloqueado"
-                                                checked={formData.bloqueado}
-                                                onCheckedChange={(v) => setFormData({ ...formData, bloqueado: v as boolean })}
-                                            />
-                                            <Label htmlFor="bloqueado" className="cursor-pointer">Bloqueado</Label>
-                                            <FieldTooltip content="Marque se o credor estiver bloqueado para transações" />
-                                        </div>
+                                    <div className="space-y-2">
+                                        <FormField
+                                            control={form.control}
+                                            name="porteEstabelecimento"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Porte Estabelecimento PJ</FormLabel>
+                                                        <FieldTooltip content="Porte do estabelecimento conforme classificação da Receita Federal" />
+                                                    </div>
+                                                    <Select onValueChange={field.onChange} value={field.value || ''}>
+                                                        <FormControl>
+                                                            <SelectTrigger className="w-full sm:w-1/3">
+                                                                <SelectValue placeholder="Selecione" />
+                                                            </SelectTrigger>
+                                                        </FormControl>
+                                                        <SelectContent>
+                                                            {PORTE_ESTABELECIMENTO_OPTIONS.map((o) => (
+                                                                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                                            ))}
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <FormField
+                                            control={form.control}
+                                            name="observacoes"
+                                            render={({ field }) => (
+                                                <FormItem>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel>Observações</FormLabel>
+                                                        <FieldTooltip content="Observações gerais sobre o credor" />
+                                                    </div>
+                                                    <FormControl>
+                                                        <textarea
+                                                            className="min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                            {...field}
+                                                            value={field.value || ''}
+                                                            placeholder="Observações gerais..."
+                                                        />
+                                                    </FormControl>
+                                                    <FormMessage />
+                                                </FormItem>
+                                            )}
+                                        />
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center gap-6 pt-2">
+                                        <FormField
+                                            control={form.control}
+                                            name="inativo"
+                                            render={({ field }) => (
+                                                <FormItem className="flex items-end gap-2 space-y-0">
+                                                    <FormControl>
+                                                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                                                    </FormControl>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel className="cursor-pointer">Inativo</FormLabel>
+                                                        <FieldTooltip content="Marque se o credor estiver inativo" />
+                                                    </div>
+                                                </FormItem>
+                                            )}
+                                        />
+                                        <FormField
+                                            control={form.control}
+                                            name="bloqueado"
+                                            render={({ field }) => (
+                                                <FormItem className="flex items-end gap-2 space-y-0">
+                                                    <FormControl>
+                                                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                                                    </FormControl>
+                                                    <div className="flex items-center gap-1">
+                                                        <FormLabel className="cursor-pointer">Bloqueado</FormLabel>
+                                                        <FieldTooltip content="Marque se o credor estiver bloqueado para transações" />
+                                                    </div>
+                                                </FormItem>
+                                            )}
+                                        />
                                     </div>
                                 </CardContent>
                             </Card>
@@ -1021,12 +1268,13 @@ export default function NovoCredorPage() {
             </Card>
 
             <ActionBar
-                onSalvar={handleSalvar}
+                onSalvar={() => {}}
                 onCancelar={handleCancelar}
                 onLimpar={handleLimpar}
                 mode="create"
-                isLoading={saving}
+                isLoading={isSaving}
             />
-        </div>
+            </form>
+        </Form>
     );
 }

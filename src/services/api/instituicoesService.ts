@@ -4,6 +4,7 @@
  */
 
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { sanitizeSearchTerm } from "@/utils";
 
 export interface IInstituicaoDB {
     id: string;
@@ -43,8 +44,10 @@ export const instituicoesService = {
             .eq('excluido', false)
             .order('nome', { ascending: true });
 
-        if (termoBusca) {
-            query = query.or(`nome.ilike.%${termoBusca}%,nome_abreviado.ilike.%${termoBusca}%,codigo.ilike.%${termoBusca}%`);
+        const termoSanitizado = termoBusca ? sanitizeSearchTerm(termoBusca) : '';
+
+        if (termoSanitizado) {
+            query = query.or(`nome.ilike.%${termoSanitizado}%,nome_abreviado.ilike.%${termoSanitizado}%,codigo.ilike.%${termoSanitizado}%`);
         }
 
         const { data, error } = await query;
@@ -113,7 +116,55 @@ export const instituicoesService = {
         return data as IInstituicaoDB;
     },
 
+    async verificarDependencias(id: string): Promise<{ podeExcluir: boolean; relatorios: string[] }> {
+        const supabase = getSupabaseClient();
+        const relatorios: string[] = [];
+
+        // Verifica órgãos
+        const { count: countOrgaos } = await supabase
+            .from('orgaos')
+            .select('*', { count: 'exact', head: true })
+            .eq('instituicao_id', id)
+            .eq('excluido', false);
+
+        if (countOrgaos && countOrgaos > 0) {
+            relatorios.push(`${countOrgaos} órgão(s) vinculado(s)`);
+        }
+
+        // Verifica usuários diretos
+        const { count: countUsuarios } = await supabase
+            .from('usuarios')
+            .select('*', { count: 'exact', head: true })
+            .eq('instituicao_id', id)
+            .eq('excluido', false);
+
+        if (countUsuarios && countUsuarios > 0) {
+            relatorios.push(`${countUsuarios} usuário(s) vinculado(s) diretamente`);
+        }
+
+        // Verifica lotações
+        const { count: countLotacoes } = await supabase
+            .from('usuario_lotacoes')
+            .select('*', { count: 'exact', head: true })
+            .eq('instituicao_id', id)
+            .eq('excluido', false);
+
+        if (countLotacoes && countLotacoes > 0) {
+            relatorios.push(`${countLotacoes} lotação(ões) vinculada(s)`);
+        }
+
+        return {
+            podeExcluir: relatorios.length === 0,
+            relatorios
+        };
+    },
+
     async excluir(id: string): Promise<void> {
+        const dependencias = await this.verificarDependencias(id);
+        if (!dependencias.podeExcluir) {
+            throw new Error(`Não é possível excluir. Dependências ativas: ${dependencias.relatorios.join(', ')}`);
+        }
+
         const supabase = getSupabaseClient();
         const { error } = await supabase
             .from(TABLE_NAME)

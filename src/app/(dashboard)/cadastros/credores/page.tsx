@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -15,17 +15,22 @@ import {
 } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ListPagination } from '@/components/ui/list-pagination';
 import { Plus, Search, Pencil, Trash2, Wallet, Loader2, ArrowLeft, User, Building2 } from 'lucide-react';
 import type { ICredor } from '@/types';
 import { credoresService } from '@/services/api/credoresService';
+import { useCadastroDialogs } from '@/components/cadastros/cadastro-dialog-provider';
 
 export default function CredoresPage() {
+    const itensPorPagina = 10;
     const router = useRouter();
+    const { showConfirm } = useCadastroDialogs();
     const [credores, setCredores] = useState<ICredor[]>([]);
     const [loading, setLoading] = useState(true);
     const [termoBusca, setTermoBusca] = useState('');
+    const [paginaAtual, setPaginaAtual] = useState(1);
 
-    const carregarCredores = async () => {
+    const carregarCredores = useCallback(async () => {
         setLoading(true);
         try {
             const dados = await credoresService.listar(termoBusca);
@@ -36,7 +41,7 @@ export default function CredoresPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [termoBusca]);
 
     useEffect(() => {
         // Debounce search
@@ -44,6 +49,10 @@ export default function CredoresPage() {
             carregarCredores();
         }, 500);
         return () => clearTimeout(timer);
+    }, [carregarCredores]);
+
+    useEffect(() => {
+        setPaginaAtual(1);
     }, [termoBusca]);
 
     const handleNovo = () => {
@@ -55,7 +64,12 @@ export default function CredoresPage() {
     };
 
     const excluir = async (id: string) => {
-        if (!confirm('Tem certeza que deseja excluir este credor?')) return;
+        if (!await showConfirm({
+            title: 'Excluir credor',
+            description: 'Tem certeza que deseja excluir este credor?',
+            confirmLabel: 'Excluir',
+            variant: 'danger',
+        })) return;
 
         try {
             await credoresService.excluir(id);
@@ -71,6 +85,7 @@ export default function CredoresPage() {
     const totalCredores = credores.length;
     const pessoasFisicas = credores.filter((c) => c.tipoCredor === 'Física').length;
     const pessoasJuridicas = credores.filter((c) => c.tipoCredor === 'Jurídica').length;
+    const credoresPaginados = credores.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
 
     return (
         <div className="space-y-6">
@@ -192,7 +207,7 @@ export default function CredoresPage() {
                                             </TableCell>
                                         </TableRow>
                                     ) : (
-                                        credores.map((credor) => (
+                                        credoresPaginados.map((credor) => (
                                             <TableRow key={credor.id}>
                                                 <TableCell>
                                                     <Badge
@@ -248,6 +263,7 @@ export default function CredoresPage() {
                             </Table>
                         </div>
                     )}
+                    <ListPagination currentPage={paginaAtual} totalItems={credores.length} itemsPerPage={itensPorPagina} onPageChange={setPaginaAtual} itemLabel="credores" />
                 </CardContent>
             </Card>
         </div>

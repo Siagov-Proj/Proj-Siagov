@@ -4,6 +4,7 @@
  */
 
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { sanitizeSearchTerm } from "@/utils";
 
 export interface IEsferaDB {
     id: string;
@@ -27,8 +28,10 @@ export const esferasService = {
             .eq('excluido', false)
             .order('nome', { ascending: true });
 
-        if (termoBusca) {
-            query = query.or(`nome.ilike.%${termoBusca}%,sigla.ilike.%${termoBusca}%`);
+        const termoSanitizado = termoBusca ? sanitizeSearchTerm(termoBusca) : '';
+
+        if (termoSanitizado) {
+            query = query.or(`nome.ilike.%${termoSanitizado}%,sigla.ilike.%${termoSanitizado}%`);
         }
 
         const { data, error } = await query;

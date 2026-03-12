@@ -19,7 +19,8 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Loader2, ShieldCheck, ArrowRight, User } from 'lucide-react';
+import { ListPagination } from '@/components/ui/list-pagination';
+import { Search, Loader2, ShieldCheck, User } from 'lucide-react';
 import { auditService, IAuditLog } from '@/services/api';
 
 // Reusing some rendering logic from the modal
@@ -56,10 +57,12 @@ function formatTableName(name: string) {
 }
 
 export default function AuditoriaPage() {
+    const itensPorPagina = 10;
     const [logs, setLogs] = useState<IAuditLog[]>([]);
     const [loading, setLoading] = useState(true);
     const [filterTable, setFilterTable] = useState('all');
     const [filterAction, setFilterAction] = useState('all');
+    const [paginaAtual, setPaginaAtual] = useState(1);
 
     // Lista fixa (ou dinâmica se quiser buscar de uma tipagem) das tabelas
     const tables = [
@@ -86,6 +89,12 @@ export default function AuditoriaPage() {
     useEffect(() => {
         carregarLogs();
     }, [carregarLogs]);
+
+    useEffect(() => {
+        setPaginaAtual(1);
+    }, [filterTable, filterAction]);
+
+    const logsPaginados = logs.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
 
     return (
         <div className="space-y-6">
@@ -171,7 +180,7 @@ export default function AuditoriaPage() {
                                             </TableCell>
                                         </TableRow>
                                     ) : (
-                                        logs.map((log) => (
+                                        logsPaginados.map((log) => (
                                             <TableRow key={log.id}>
                                                 <TableCell className="text-sm font-medium whitespace-nowrap">
                                                     {formatDate(log.created_at)}
@@ -215,6 +224,7 @@ export default function AuditoriaPage() {
                             </Table>
                         </div>
                     )}
+                    <ListPagination currentPage={paginaAtual} totalItems={logs.length} itemsPerPage={itensPorPagina} onPageChange={setPaginaAtual} itemLabel="registros" />
                 </CardContent>
             </Card>
         </div>

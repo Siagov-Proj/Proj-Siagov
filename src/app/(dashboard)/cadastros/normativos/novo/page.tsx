@@ -24,7 +24,6 @@ import {
     Folder,
     Plus,
     Trash2,
-    Pencil,
     FileText,
     HelpCircle,
     Loader2,
@@ -49,6 +48,12 @@ import {
     ISetorDB,
 } from '@/services/api';
 import { LeisCadastroDialog } from '@/components/normativos/LeisCadastroDialog';
+import { buildNormativoLabel, stripNormativoCode } from '@/utils';
+
+interface ISubcategoriaDraft {
+    codigo: string;
+    nome: string;
+}
 
 const steps = [
     { id: 1, label: '01 - Dados Gerais' },
@@ -71,6 +76,7 @@ export default function NovoNormativoPage() {
     // Form States - Step 1
     const [leiId, setLeiId] = useState('');
     const [nomeTitulo, setNomeTitulo] = useState('');
+    const [codigoCategoria, setCodigoCategoria] = useState('');
     const [nomeCategoria, setNomeCategoria] = useState('');
     const [orgaosSelecionados, setOrgaosSelecionados] = useState<string[]>([]);
     const [selecionarTodosOrgaos, setSelecionarTodosOrgaos] = useState(false);
@@ -78,7 +84,7 @@ export default function NovoNormativoPage() {
 
     // Subcategorias
     const [novaSubcategoria, setNovaSubcategoria] = useState('');
-    const [subcategorias, setSubcategorias] = useState<string[]>([]);
+    const [subcategorias, setSubcategorias] = useState<ISubcategoriaDraft[]>([]);
 
     // Documentos (Step 3)
     const [subcategoriaSelecionada, setSubcategoriaSelecionada] = useState('');
@@ -193,26 +199,20 @@ export default function NovoNormativoPage() {
         });
     };
 
-    const handleAddSubcategoria = () => {
-        if (novaSubcategoria.trim()) {
-            setSubcategorias([...subcategorias, novaSubcategoria.trim()]);
-            setNovaSubcategoria('');
-        }
-    };
-
-    const handleRemoveSubcategoria = (index: number) => {
-        setSubcategorias(subcategorias.filter((_, i) => i !== index));
-    };
-
     const validarStep1 = (): boolean => {
         const novosErros: Record<string, string> = {};
         if (!leiId) novosErros.leiId = 'Lei é obrigatória';
         if (!nomeTitulo.trim()) novosErros.nomeTitulo = 'Nome do Título é obrigatório';
+        if (!/^\d+$/.test(codigoCategoria.trim())) novosErros.codigoCategoria = 'Codigo da categoria deve ser numerico';
         if (!nomeCategoria.trim()) novosErros.nomeCategoria = 'Nome da Categoria é obrigatório';
         if (orgaosSelecionados.length === 0) novosErros.orgaos = 'Selecione pelo menos um órgão';
         setErros(novosErros);
         return Object.keys(novosErros).length === 0;
     };
+
+    const categoriaFormatada = codigoCategoria.trim() && nomeCategoria.trim()
+        ? buildNormativoLabel(codigoCategoria.trim(), nomeCategoria)
+        : nomeCategoria.trim();
 
     const handleSave = async () => {
         if (!validarStep1()) {
@@ -228,7 +228,7 @@ export default function NovoNormativoPage() {
 
             // 2. Criar a categoria
             const categoria = await categoriasDocService.criarCategoria({
-                nome: nomeCategoria.trim(),
+                nome: buildNormativoLabel(codigoCategoria.trim(), nomeCategoria.trim()),
                 titulo_id: titulo.id,
                 ativo,
             });
@@ -237,10 +237,10 @@ export default function NovoNormativoPage() {
             await categoriasDocService.vincularOrgaos(categoria.id, orgaosSelecionados);
 
             // 4. Criar subcategorias
-            for (const subNome of subcategorias) {
+            for (const subcategoria of subcategorias) {
                 await categoriasDocService.criarSubcategoria({
                     categoria_id: categoria.id,
-                    nome: subNome,
+                    nome: buildNormativoLabel(subcategoria.codigo, subcategoria.nome),
                     ativo: true,
                 });
             }
@@ -256,6 +256,28 @@ export default function NovoNormativoPage() {
 
     const handleLeisChanged = () => {
         carregarDados();
+    };
+
+    const handleAddSubcategoria = () => {
+        const nomeLimpo = stripNormativoCode(novaSubcategoria);
+        if (!nomeLimpo.trim() || !codigoCategoria.trim()) {
+            return;
+        }
+
+        const proximoCodigo = `${codigoCategoria.trim()}.${subcategorias.length + 1}`;
+        setSubcategorias([...subcategorias, { codigo: proximoCodigo, nome: nomeLimpo.trim() }]);
+        setNovaSubcategoria('');
+    };
+
+    const handleRemoveSubcategoria = (index: number) => {
+        const atualizadas = subcategorias
+            .filter((_, currentIndex) => currentIndex !== index)
+            .map((subcategoria, currentIndex) => ({
+                ...subcategoria,
+                codigo: `${codigoCategoria.trim()}.${currentIndex + 1}`,
+            }));
+
+        setSubcategorias(atualizadas);
     };
 
     if (loadingData) {
@@ -368,34 +390,66 @@ export default function NovoNormativoPage() {
                                 </div>
 
                                 {/* Nome da Categoria */}
-                                <div className="space-y-2">
-                                    <TooltipProvider>
-                                        <div className="flex items-center gap-1">
-                                            <Label htmlFor="categoria">Nome da Categoria <span className="text-red-500">*</span></Label>
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                                                </TooltipTrigger>
-                                                <TooltipContent>
-                                                    <p>Nome da categoria de documentos. Ex: Pareceres Técnicos</p>
-                                                </TooltipContent>
-                                            </Tooltip>
+                                <div className="grid gap-4 md:grid-cols-[140px_minmax(0,1fr)]">
+                                    <div className="space-y-2">
+                                        <TooltipProvider>
+                                            <div className="flex items-center gap-1">
+                                                <Label htmlFor="codigoCategoria">Codigo da Categoria <span className="text-red-500">*</span></Label>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <p>Codigo numerico base da categoria. Ex: 4 para gerar subcategorias 4.1, 4.2, 4.3...</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </div>
+                                        </TooltipProvider>
+                                        <Input
+                                            id="codigoCategoria"
+                                            placeholder="Ex: 4"
+                                            value={codigoCategoria}
+                                            onChange={(e) => {
+                                                setCodigoCategoria(e.target.value.replace(/\D/g, ''));
+                                                setErros(prev => ({ ...prev, codigoCategoria: '' }));
+                                            }}
+                                            className={`font-mono ${erros.codigoCategoria ? 'border-red-500' : ''}`}
+                                        />
+                                        {erros.codigoCategoria && <p className="text-sm text-red-500">{erros.codigoCategoria}</p>}
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <TooltipProvider>
+                                            <div className="flex items-center gap-1">
+                                                <Label htmlFor="categoria">Nome da Categoria <span className="text-red-500">*</span></Label>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <p>Nome da categoria de documentos. Ex: Contratação Direta - Dispensas - Lei 14.133/21 - GOVPB</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </div>
+                                        </TooltipProvider>
+                                        <Input
+                                            id="categoria"
+                                            placeholder="Ex: Contratação Direta - Dispensas - Lei 14.133/21 - GOVPB"
+                                            value={nomeCategoria}
+                                            onChange={(e) => {
+                                                if (e.target.value.length <= 100) {
+                                                    setNomeCategoria(e.target.value);
+                                                    setErros(prev => ({ ...prev, nomeCategoria: '' }));
+                                                }
+                                            }}
+                                            className={erros.nomeCategoria ? 'border-red-500' : ''}
+                                        />
+                                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                                            <span>Preview: {categoriaFormatada || 'A categoria sera exibida com o codigo informado.'}</span>
+                                            <span>{nomeCategoria.length}/100 caracteres</span>
                                         </div>
-                                    </TooltipProvider>
-                                    <Input
-                                        id="categoria"
-                                        placeholder="Ex: Pareceres Técnicos"
-                                        value={nomeCategoria}
-                                        onChange={(e) => {
-                                            if (e.target.value.length <= 100) {
-                                                setNomeCategoria(e.target.value);
-                                                setErros(prev => ({ ...prev, nomeCategoria: '' }));
-                                            }
-                                        }}
-                                        className={erros.nomeCategoria ? 'border-red-500' : ''}
-                                    />
-                                    <div className="text-xs text-right text-muted-foreground">{nomeCategoria.length}/100 caracteres</div>
-                                    {erros.nomeCategoria && <p className="text-sm text-red-500">{erros.nomeCategoria}</p>}
+                                        {erros.nomeCategoria && <p className="text-sm text-red-500">{erros.nomeCategoria}</p>}
+                                    </div>
                                 </div>
 
                                 {/* Código do Órgão */}
@@ -500,16 +554,20 @@ export default function NovoNormativoPage() {
                                     <Label>Adicionar Nova Subcategoria</Label>
                                     <div className="flex gap-2">
                                         <Input
-                                            placeholder="Ex: Parecer Jurídico"
+                                            placeholder={codigoCategoria ? `Ex: ${codigoCategoria}.1. Dispensa - Obras e Servicos de Engenharia` : 'Informe primeiro o codigo da categoria'}
                                             value={novaSubcategoria}
                                             onChange={(e) => setNovaSubcategoria(e.target.value)}
                                             onKeyDown={(e) => e.key === 'Enter' && handleAddSubcategoria()}
+                                            disabled={!codigoCategoria}
                                         />
-                                        <Button className="bg-primary hover:opacity-90 text-primary-foreground" onClick={handleAddSubcategoria}>
+                                        <Button className="bg-primary hover:opacity-90 text-primary-foreground" onClick={handleAddSubcategoria} disabled={!codigoCategoria}>
                                             <Plus className="mr-2 h-4 w-4" />
                                             Adicionar
                                         </Button>
                                     </div>
+                                    <p className="text-xs text-muted-foreground">
+                                        As subcategorias serao numeradas automaticamente seguindo o prefixo da categoria.
+                                    </p>
                                 </div>
 
                                 <div className="pt-4 space-y-3">
@@ -522,7 +580,7 @@ export default function NovoNormativoPage() {
                                         ) : (
                                             subcategorias.map((sub, index) => (
                                                 <div key={index} className="flex items-center justify-between p-3 bg-card border rounded-md shadow-sm">
-                                                    <span className="text-sm font-medium">{index + 1}. {sub}</span>
+                                                    <span className="text-sm font-medium">{buildNormativoLabel(sub.codigo, sub.nome)}</span>
                                                     <div className="flex items-center gap-1">
                                                         <Button
                                                             variant="ghost"
@@ -553,12 +611,12 @@ export default function NovoNormativoPage() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="space-y-2">
                                     <Label>Categoria <span className="text-red-500">*</span></Label>
-                                    <Select disabled value={nomeCategoria ? 'current' : ''}>
+                                    <Select disabled value={categoriaFormatada ? 'current' : ''}>
                                         <SelectTrigger className="bg-muted">
-                                            <SelectValue placeholder={nomeCategoria || "Categoria atual"} />
+                                            <SelectValue placeholder={categoriaFormatada || 'Categoria atual'} />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="current">{nomeCategoria || "Categoria Atual"}</SelectItem>
+                                            <SelectItem value="current">{categoriaFormatada || 'Categoria Atual'}</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -574,7 +632,9 @@ export default function NovoNormativoPage() {
                                                 <SelectItem value="none" disabled>Nenhuma subcategoria</SelectItem>
                                             ) : (
                                                 subcategorias.map((sub, i) => (
-                                                    <SelectItem key={i} value={sub}>{sub}</SelectItem>
+                                                    <SelectItem key={i} value={buildNormativoLabel(sub.codigo, sub.nome)}>
+                                                        {buildNormativoLabel(sub.codigo, sub.nome)}
+                                                    </SelectItem>
                                                 ))
                                             )}
                                         </SelectContent>
@@ -665,9 +725,18 @@ export default function NovoNormativoPage() {
                                     className="cursor-pointer"
                                 />
                                 <p className="text-xs text-muted-foreground mt-1">
-                                    Formatos permitidos: PDF, DOC, DOCX, XLS, XLSX (Máx. 10MB)
+                                    Formatos permitidos: PDF, DOC, DOCX, DOCM, DOT, DOTX, DOTM, ODT, RTF, TXT e Markdown (Max. 50MB)
                                 </p>
                             </div>
+
+                            {subcategoriaSelecionada && (
+                                <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 p-4">
+                                    <p className="text-sm font-medium text-primary">Preview da numeracao do documento</p>
+                                    <p className="mt-1 text-sm text-muted-foreground">
+                                        O primeiro documento desta subcategoria sera gerado com prefixo baseado em <span className="font-mono">{subcategoriaSelecionada}</span>.
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     )}
 

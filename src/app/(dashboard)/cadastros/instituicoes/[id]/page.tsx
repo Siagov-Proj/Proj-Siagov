@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { z } from 'zod';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,9 +17,10 @@ import {
 import { ActionBar } from '@/components/ui/action-bar';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { maskCnpj, maskCep } from '@/utils/masks';
+import { validateCnpj, validateEmail } from '@/utils/formatters';
 import { ESTADOS_BRASIL, FIELD_LIMITS } from '@/utils/constants';
 import { ArrowLeft, Loader2 } from 'lucide-react';
-import { instituicoesService, esferasService, IEsferaDB, IInstituicaoDB } from '@/services/api';
+import { instituicoesService, esferasService, IEsferaDB } from '@/services/api';
 
 const emptyFormData = {
     codigo: '',
@@ -36,6 +38,23 @@ const emptyFormData = {
     municipio: '',
     uf: '',
 };
+
+const instituicaoSchema = z.object({
+    codigo: z.string().regex(/^\d{3}$/, 'Codigo deve conter 3 digitos'),
+    nome: z.string().trim().min(1, 'Nome e obrigatorio').max(FIELD_LIMITS.nome, 'Nome invalido'),
+    nomeAbreviado: z.string().max(FIELD_LIMITS.nomeAbreviado, 'Nome abreviado invalido'),
+    esferaId: z.string().uuid('Esfera invalida'),
+    cnpj: z.string().refine((value) => !value || validateCnpj(value), 'CNPJ invalido'),
+    email: z.string().refine((value) => !value || validateEmail(value), 'E-mail invalido'),
+    codigoSiasg: z.string().max(6, 'Codigo SIASG invalido'),
+    cep: z.string().refine((value) => !value || /^\d{5}-\d{3}$/.test(value), 'CEP invalido'),
+    logradouro: z.string().max(FIELD_LIMITS.logradouro, 'Logradouro invalido'),
+    numero: z.string().max(FIELD_LIMITS.numero, 'Numero invalido'),
+    complemento: z.string().max(FIELD_LIMITS.complemento, 'Complemento invalido'),
+    bairro: z.string().max(FIELD_LIMITS.bairro, 'Bairro invalido'),
+    municipio: z.string().max(FIELD_LIMITS.municipio, 'Municipio invalido'),
+    uf: z.string().max(2, 'UF invalida'),
+});
 
 export default function EditarInstituicaoPage() {
     const router = useRouter();
@@ -104,20 +123,31 @@ export default function EditarInstituicaoPage() {
     }, [carregarEsferas, carregarInstituicao]);
 
     const validate = (): boolean => {
-        const newErrors: Record<string, string> = {};
+        const resultado = instituicaoSchema.safeParse(formData);
 
-        if (!formData.nome) newErrors.nome = 'Nome é obrigatório';
-        if (!formData.esferaId) newErrors.esfera = 'Esfera é obrigatória';
+        if (resultado.success) {
+            setErrors({});
+            return true;
+        }
+
+        const newErrors: Record<string, string> = {};
+        for (const issue of resultado.error.issues) {
+            const campo = issue.path[0];
+            if (typeof campo === 'string' && !newErrors[campo]) {
+                newErrors[campo] = issue.message;
+            }
+        }
 
         setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
+        return false;
     };
 
     const handleSalvar = async () => {
+        if (saving) return;
         if (!validate()) return;
 
+        setSaving(true);
         try {
-            setSaving(true);
             await instituicoesService.atualizar(params.id as string, {
                 codigo: formData.codigo,
                 nome: formData.nome,
@@ -251,7 +281,7 @@ export default function EditarInstituicaoPage() {
                                             setFormData({ ...formData, esferaId: value })
                                         }
                                     >
-                                        <SelectTrigger className={errors.esfera ? 'border-red-500' : ''}>
+                                        <SelectTrigger className={errors.esferaId ? 'border-red-500' : ''}>
                                             <SelectValue placeholder="Selecione a esfera" />
                                         </SelectTrigger>
                                         <SelectContent>
@@ -263,7 +293,7 @@ export default function EditarInstituicaoPage() {
                                         </SelectContent>
                                     </Select>
                                 )}
-                                {errors.esfera && <p className="text-sm text-red-500">{errors.esfera}</p>}
+                                {errors.esferaId && <p className="text-sm text-red-500">{errors.esferaId}</p>}
                             </div>
                         </div>
 
@@ -280,7 +310,9 @@ export default function EditarInstituicaoPage() {
                                     onChange={(e) => setFormData({ ...formData, cnpj: maskCnpj(e.target.value) })}
                                     maxLength={18}
                                     placeholder="00.000.000/0001-00"
+                                    className={errors.cnpj ? 'border-red-500' : ''}
                                 />
+                                {errors.cnpj && <p className="text-sm text-red-500">{errors.cnpj}</p>}
                             </div>
 
                             <div className="space-y-2">
@@ -310,13 +342,15 @@ export default function EditarInstituicaoPage() {
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                 <div className="space-y-2">
                                     <Label htmlFor="cep">CEP</Label>
-                                    <Input
-                                        id="cep"
-                                        value={formData.cep}
-                                        onChange={(e) => setFormData({ ...formData, cep: maskCep(e.target.value) })}
-                                        maxLength={9}
-                                        placeholder="00000-000"
-                                    />
+                                <Input
+                                    id="cep"
+                                    value={formData.cep}
+                                    onChange={(e) => setFormData({ ...formData, cep: maskCep(e.target.value) })}
+                                    maxLength={9}
+                                    placeholder="00000-000"
+                                    className={errors.cep ? 'border-red-500' : ''}
+                                />
+                                {errors.cep && <p className="text-sm text-red-500">{errors.cep}</p>}
                                 </div>
 
                                 <div className="space-y-2 sm:col-span-2">
@@ -409,7 +443,9 @@ export default function EditarInstituicaoPage() {
                                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                                 maxLength={FIELD_LIMITS.email}
                                 placeholder="contato@instituicao.gov.br"
+                                className={errors.email ? 'border-red-500' : ''}
                             />
+                            {errors.email && <p className="text-sm text-red-500">{errors.email}</p>}
                         </div>
                     </div>
                 </CardContent>

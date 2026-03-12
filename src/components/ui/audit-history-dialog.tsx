@@ -164,8 +164,10 @@ export function AuditHistoryDialog({
                                             <h4 className="font-medium text-sm border-b pb-2">Campos Alterados</h4>
                                             <div className="grid grid-cols-1 gap-2">
                                                 {Object.keys(selectedLog.new_data).map((key) => {
-                                                    const oldVal = selectedLog.old_data[key];
-                                                    const newVal = selectedLog.new_data[key];
+                                                    const oldData = selectedLog.old_data ?? {};
+                                                    const newData = selectedLog.new_data ?? {};
+                                                    const oldVal = oldData[key];
+                                                    const newVal = newData[key];
                                                     // Only show fields that actually changed
                                                     if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
                                                         return (

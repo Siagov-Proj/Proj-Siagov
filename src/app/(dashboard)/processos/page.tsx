@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ListPagination } from '@/components/ui/list-pagination';
 import { Plus, Search, Eye, FileText, ArrowRight, Filter, Calendar, X, Files, Clock, CheckCircle, Inbox, User } from 'lucide-react';
 import { formatDateBR } from '@/utils/formatters';
 import type { IProcesso } from '@/types';
@@ -162,6 +163,7 @@ const usuarioLogado = {
 };
 
 export default function ProcessosPage() {
+    const itensPorPagina = 10;
     const [processos] = useState(processosIniciais);
     const [termoBusca, setTermoBusca] = useState('');
     const [filtroTipo, setFiltroTipo] = useState('todos');
@@ -170,6 +172,7 @@ export default function ProcessosPage() {
     const [filtroSetor, setFiltroSetor] = useState('todos');
     const [filtroPeriodo, setFiltroPeriodo] = useState('todos');
     const [mostrarFiltros, setMostrarFiltros] = useState(false);
+    const [paginaAtual, setPaginaAtual] = useState(1);
 
     // Setores únicos para filtro
     const setoresUnicos = Array.from(new Set(processos.map((p) => p.setorAtual || '')));
@@ -220,6 +223,7 @@ export default function ProcessosPage() {
 
         return matchBusca && matchTipo && matchStatus && matchPrioridade && matchSetor && matchPeriodo;
     });
+    const processosPaginados = processosFiltrados.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
 
     const obterCorStatus = (status: string) => {
         switch (status) {
@@ -233,19 +237,6 @@ export default function ProcessosPage() {
                 return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-300';
             default:
                 return 'bg-gray-100 text-gray-800';
-        }
-    };
-
-    const obterCorPrioridade = (prioridade: string) => {
-        switch (prioridade) {
-            case 'Alta':
-                return 'text-red-600 dark:text-red-400';
-            case 'Normal':
-                return 'text-blue-600 dark:text-blue-400';
-            case 'Baixa':
-                return 'text-gray-600 dark:text-gray-400';
-            default:
-                return '';
         }
     };
 
@@ -509,7 +500,7 @@ export default function ProcessosPage() {
                                         </TableCell>
                                     </TableRow>
                                 ) : (
-                                    processosFiltrados.map((processo) => (
+                                    processosPaginados.map((processo) => (
                                         <TableRow key={processo.id}>
                                             <TableCell className="font-mono font-medium">{processo.numero}</TableCell>
                                             <TableCell>
@@ -562,6 +553,7 @@ export default function ProcessosPage() {
                             </TableBody>
                         </Table>
                     </div>
+                    <ListPagination currentPage={paginaAtual} totalItems={processosFiltrados.length} itemsPerPage={itensPorPagina} onPageChange={setPaginaAtual} itemLabel="processos" />
                 </CardContent>
             </Card>
         </div>

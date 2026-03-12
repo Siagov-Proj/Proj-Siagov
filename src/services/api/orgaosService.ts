@@ -4,6 +4,7 @@
  */
 
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { sanitizeSearchTerm } from "@/utils";
 
 export interface IOrgaoDB {
     id: string;
@@ -37,8 +38,10 @@ export const orgaosService = {
             .eq('excluido', false)
             .order('nome', { ascending: true });
 
-        if (termoBusca) {
-            query = query.or(`nome.ilike.%${termoBusca}%,sigla.ilike.%${termoBusca}%,codigo.ilike.%${termoBusca}%`);
+        const termoSanitizado = termoBusca ? sanitizeSearchTerm(termoBusca) : '';
+
+        if (termoSanitizado) {
+            query = query.or(`nome.ilike.%${termoSanitizado}%,sigla.ilike.%${termoSanitizado}%,codigo.ilike.%${termoSanitizado}%`);
         }
 
         const { data, error } = await query;
@@ -107,7 +110,66 @@ export const orgaosService = {
         return data as IOrgaoDB;
     },
 
+    async verificarDependencias(id: string): Promise<{ podeExcluir: boolean; relatorios: string[] }> {
+        const supabase = getSupabaseClient();
+        const relatorios: string[] = [];
+
+        // Verifica UGs
+        const { count: countUgs } = await supabase
+            .from('unidades_gestoras')
+            .select('*', { count: 'exact', head: true })
+            .eq('orgao_id', id)
+            .eq('excluido', false);
+
+        if (countUgs && countUgs > 0) {
+            relatorios.push(`${countUgs} unidade(s) gestora(s) vinculada(s)`);
+        }
+
+        // Verifica Setores
+        const { count: countSetores } = await supabase
+            .from('setores')
+            .select('*', { count: 'exact', head: true })
+            .eq('orgao_id', id)
+            .eq('excluido', false);
+
+        if (countSetores && countSetores > 0) {
+            relatorios.push(`${countSetores} setor(es) vinculado(s)`);
+        }
+
+        // Verifica usuários
+        const { count: countUsuarios } = await supabase
+            .from('usuarios')
+            .select('*', { count: 'exact', head: true })
+            .eq('orgao_id', id)
+            .eq('excluido', false);
+
+        if (countUsuarios && countUsuarios > 0) {
+            relatorios.push(`${countUsuarios} usuário(s) vinculado(s)`);
+        }
+
+        // Verifica lotações
+        const { count: countLotacoes } = await supabase
+            .from('usuario_lotacoes')
+            .select('*', { count: 'exact', head: true })
+            .eq('orgao_id', id)
+            .eq('excluido', false);
+
+        if (countLotacoes && countLotacoes > 0) {
+            relatorios.push(`${countLotacoes} lotação(ões) vinculada(s)`);
+        }
+
+        return {
+            podeExcluir: relatorios.length === 0,
+            relatorios
+        };
+    },
+
     async excluir(id: string): Promise<void> {
+        const dependencias = await this.verificarDependencias(id);
+        if (!dependencias.podeExcluir) {
+            throw new Error(`Não é possível excluir. Dependências ativas: ${dependencias.relatorios.join(', ')}`);
+        }
+
         const supabase = getSupabaseClient();
         const { error } = await supabase
             .from(TABLE_NAME)

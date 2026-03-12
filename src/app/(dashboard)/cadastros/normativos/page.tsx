@@ -48,13 +48,18 @@ import {
     ISubcategoriaDocumentoDB,
 } from '@/services/api';
 import { LeisCadastroDialog } from '@/components/normativos/LeisCadastroDialog';
+import { useCadastroDialogs } from '@/components/cadastros/cadastro-dialog-provider';
+import { ListPagination } from '@/components/ui/list-pagination';
+import { compareNormativoLabels } from '@/utils';
 
 interface ICategoriaComSubcategorias extends ICategoriaDocumentoDB {
     subcategorias?: ISubcategoriaDocumentoDB[];
 }
 
 export default function NormativosPage() {
+    const itensPorPagina = 10;
     const router = useRouter();
+    const { showConfirm } = useCadastroDialogs();
     const [categorias, setCategorias] = useState<ICategoriaComSubcategorias[]>([]);
     const [leis, setLeis] = useState<ILeiNormativaDB[]>([]);
     const [loading, setLoading] = useState(true);
@@ -62,6 +67,7 @@ export default function NormativosPage() {
     const [filtroLei, setFiltroLei] = useState('todas');
     const [expandidas, setExpandidas] = useState<string[]>([]);
     const [deleting, setDeleting] = useState<string | null>(null);
+    const [paginaAtual, setPaginaAtual] = useState(1);
 
     const carregarDados = useCallback(async () => {
         try {
@@ -87,7 +93,14 @@ export default function NormativosPage() {
                 })
             );
 
-            setCategorias(categoriasComSub);
+            setCategorias(
+                categoriasComSub
+                    .map((categoria) => ({
+                        ...categoria,
+                        subcategorias: [...(categoria.subcategorias || [])].sort((a, b) => compareNormativoLabels(a.nome, b.nome)),
+                    }))
+                    .sort((a, b) => compareNormativoLabels(a.nome, b.nome))
+            );
             setLeis(leisData);
         } catch (err) {
             console.error('Erro ao carregar dados:', err);
@@ -103,6 +116,10 @@ export default function NormativosPage() {
         return () => clearTimeout(debounce);
     }, [carregarDados]);
 
+    useEffect(() => {
+        setPaginaAtual(1);
+    }, [termoBusca, filtroLei]);
+
     const toggleExpansao = (id: string) => {
         setExpandidas((prev) =>
             prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
@@ -114,7 +131,12 @@ export default function NormativosPage() {
     };
 
     const handleExcluir = async (id: string) => {
-        if (!confirm('Tem certeza que deseja excluir esta categoria?')) return;
+        if (!await showConfirm({
+            title: 'Excluir categoria',
+            description: 'Tem certeza que deseja excluir esta categoria?',
+            confirmLabel: 'Excluir',
+            variant: 'danger',
+        })) return;
 
         try {
             setDeleting(id);
@@ -136,6 +158,8 @@ export default function NormativosPage() {
     const handleLeisChanged = () => {
         carregarDados();
     };
+
+    const categoriasPaginadas = categorias.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
 
     return (
         <div className="space-y-6">
@@ -217,7 +241,7 @@ export default function NormativosPage() {
                         </div>
                     ) : (
                         <div className="space-y-2">
-                            {categorias.map((cat) => (
+                            {categoriasPaginadas.map((cat) => (
                                 <div key={cat.id} className="border rounded-lg">
                                     {/* Cabeçalho da Categoria */}
                                     <div
@@ -348,6 +372,7 @@ export default function NormativosPage() {
             <div className="text-sm text-muted-foreground">
                 Exibindo {categorias.length} categoria(s)
             </div>
+            <ListPagination currentPage={paginaAtual} totalItems={categorias.length} itemsPerPage={itensPorPagina} onPageChange={setPaginaAtual} itemLabel="categorias" />
         </div>
     );
 }

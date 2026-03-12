@@ -4,6 +4,7 @@
  */
 
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { sanitizeSearchTerm } from "@/utils";
 
 export interface ICategoriaDocumentoDB {
     id: string;
@@ -70,8 +71,10 @@ export const categoriasDocService = {
             .eq('excluido', false)
             .order('nome', { ascending: true });
 
-        if (termoBusca) {
-            query = query.or(`nome.ilike.%${termoBusca}%`);
+        const termoSanitizado = termoBusca ? sanitizeSearchTerm(termoBusca) : '';
+
+        if (termoSanitizado) {
+            query = query.or(`nome.ilike.%${termoSanitizado}%`);
         }
 
         const { data, error } = await query;

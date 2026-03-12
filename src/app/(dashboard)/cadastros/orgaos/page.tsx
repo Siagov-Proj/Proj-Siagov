@@ -15,16 +15,22 @@ import {
 } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ListPagination } from '@/components/ui/list-pagination';
 import { Plus, Search, Pencil, Trash2, Building, ArrowLeft, Loader2 } from 'lucide-react';
 import { orgaosService, IOrgaoDB } from '@/services/api';
 import { AuditHistoryDialog } from '@/components/ui/audit-history-dialog';
+import { SmartDeleteDialog } from '@/components/SmartDeleteDialog';
 
 export default function OrgaosPage() {
+    const itensPorPagina = 10;
     const router = useRouter();
     const [orgaos, setOrgaos] = useState<IOrgaoDB[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
     const [deleting, setDeleting] = useState<string | null>(null);
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [itemToDelete, setItemToDelete] = useState<{ id: string; nome: string } | null>(null);
+    const [paginaAtual, setPaginaAtual] = useState(1);
 
     const carregarOrgaos = useCallback(async () => {
         try {
@@ -45,6 +51,10 @@ export default function OrgaosPage() {
         return () => clearTimeout(debounce);
     }, [carregarOrgaos]);
 
+    useEffect(() => {
+        setPaginaAtual(1);
+    }, [searchTerm]);
+
     const handleNovo = () => {
         router.push('/cadastros/orgaos/novo');
     };
@@ -53,26 +63,26 @@ export default function OrgaosPage() {
         router.push(`/cadastros/orgaos/${id}`);
     };
 
-    const handleDelete = async (id: string) => {
-        if (confirm('Tem certeza que deseja excluir este órgão?')) {
-            try {
-                setDeleting(id);
-                // Check for linked unidades gestoras
-                const count = await orgaosService.contarUnidadesGestoras(id);
-                if (count > 0) {
-                    alert(`Não é possível excluir. Existem ${count} unidade(s) gestora(s) vinculada(s) a este órgão.`);
-                    return;
-                }
-                await orgaosService.excluir(id);
-                setOrgaos(orgaos.filter((o) => o.id !== id));
-            } catch (err) {
-                console.error('Erro ao excluir órgão:', err);
-                alert('Erro ao excluir órgão. Tente novamente.');
-            } finally {
-                setDeleting(null);
-            }
+    const handleDeleteClick = (orgao: IOrgaoDB) => {
+        setItemToDelete({ id: orgao.id, nome: orgao.nome });
+        setDeleteModalOpen(true);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!itemToDelete) return;
+        try {
+            setDeleting(itemToDelete.id);
+            await orgaosService.excluir(itemToDelete.id);
+            setOrgaos(orgaos.filter((o) => o.id !== itemToDelete.id));
+        } catch (err: unknown) {
+            console.error('Erro ao excluir órgão:', err);
+            alert(getErrorMessage(err));
+        } finally {
+            setDeleting(null);
         }
     };
+
+    const orgaosPaginados = orgaos.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
 
     return (
         <div className="space-y-6">
@@ -147,7 +157,7 @@ export default function OrgaosPage() {
                                             </TableCell>
                                         </TableRow>
                                     ) : (
-                                        orgaos.map((orgao) => (
+                                        orgaosPaginados.map((orgao) => (
                                             <TableRow key={orgao.id}>
                                                 <TableCell className="font-mono">{orgao.codigo}</TableCell>
                                                 <TableCell className="font-medium">{orgao.nome}</TableCell>
@@ -175,7 +185,7 @@ export default function OrgaosPage() {
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
-                                                            onClick={() => handleDelete(orgao.id)}
+                                                            onClick={() => handleDeleteClick(orgao)}
                                                             className="text-red-500 hover:text-red-600"
                                                             disabled={deleting === orgao.id}
                                                         >
@@ -194,8 +204,20 @@ export default function OrgaosPage() {
                             </Table>
                         </div>
                     )}
+                    <ListPagination currentPage={paginaAtual} totalItems={orgaos.length} itemsPerPage={itensPorPagina} onPageChange={setPaginaAtual} itemLabel="órgãos" />
                 </CardContent>
             </Card>
+
+            {itemToDelete && (
+                <SmartDeleteDialog
+                    open={deleteModalOpen}
+                    onOpenChange={setDeleteModalOpen}
+                    title={`Excluir Órgão: ${itemToDelete.nome}`}
+                    onConfirm={handleConfirmDelete}
+                    onCheckDependencies={() => orgaosService.verificarDependencias(itemToDelete.id)}
+                />
+            )}
         </div>
     );
 }
+    const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : 'Erro ao excluir órgão. Tente novamente.';

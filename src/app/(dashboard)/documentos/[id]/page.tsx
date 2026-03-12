@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import dynamic from 'next/dynamic';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import {
@@ -35,8 +36,6 @@ import {
     Eye,
     Info,
     History,
-    FileDown,
-    Zap,
     Loader2,
     Shield,
     RefreshCw,
@@ -44,60 +43,179 @@ import {
     Hash
 } from 'lucide-react';
 import { formatDate, formatDateTimeBR } from '@/utils/formatters';
+import '@cyntler/react-doc-viewer/dist/index.css';
+import { renderAsync } from 'docx-preview';
 
 // Services
 import { documentosService, IDocumentoDB } from '@/services/api/documentosService';
+import { usuariosService } from '@/services/api/usuariosService';
 import { getSupabaseClient } from '@/lib/supabase/client';
+
+const DocViewer = dynamic(() => import('@cyntler/react-doc-viewer').then((mod) => mod.default), { ssr: false });
+const docViewerRenderersPromise = import('@cyntler/react-doc-viewer').then((mod) => mod.DocViewerRenderers);
+
+type IPreviewDocument = {
+    uri: string;
+    fileType?: string;
+    fileName?: string;
+    source?: 'anexo' | 'pdf';
+};
+
+type IDocViewerRenderers = Awaited<typeof docViewerRenderersPromise>;
+const DOCX_PREVIEW_EXTENSIONS = new Set(['docx', 'docm', 'dotx', 'dotm']);
+const LEGACY_WORD_EXTENSIONS = new Set(['doc', 'dot', 'rtf']);
 
 export default function DetalheDocumentoPage() {
     const params = useParams();
-    const router = useRouter();
+    const docxPreviewContainerRef = useRef<HTMLDivElement | null>(null);
     const [documento, setDocumento] = useState<IDocumentoDB | null>(null);
     const [loading, setLoading] = useState(true);
     const [isAdmin, setIsAdmin] = useState(false);
+    const [previewDocumento, setPreviewDocumento] = useState<IPreviewDocument | null>(null);
+    const [previewLoading, setPreviewLoading] = useState(false);
+    const [previewError, setPreviewError] = useState<string | null>(null);
+    const [docViewerRenderers, setDocViewerRenderers] = useState<IDocViewerRenderers | null>(null);
+    const [docxPreviewReady, setDocxPreviewReady] = useState(false);
 
-    useEffect(() => {
-        if (params.id) {
-            loadDocumento(params.id as string);
-        }
-        checkAdmin();
-    }, [params.id]);
-
-    const checkAdmin = async () => {
+    const checkAdmin = useCallback(async () => {
         try {
             const supabase = getSupabaseClient();
             const { data: { user } } = await supabase.auth.getUser();
-            // Verifica se o usuário tem role de admin ou metadado de administrador
+            // Verifica se o usuário tem role de admin ou metadado de administrador de forma segura
             if (user) {
-                const appMetadata = user.app_metadata;
-                const userMetadata = user.user_metadata;
-                const isAdminUser =
-                    appMetadata?.role === 'admin' ||
-                    appMetadata?.claims_admin === true ||
-                    userMetadata?.role === 'admin' ||
-                    user.email?.endsWith('@admin.siagov.gov.br');
+                const isAdminUser = usuariosService.isGlobalAdminUser(user);
                 setIsAdmin(!!isAdminUser);
             }
         } catch (err) {
             console.warn('Não foi possível verificar permissões de admin:', err);
         }
+    }, []);
+
+    const obterExtensaoArquivo = (nome: string) => {
+        const partes = nome.split('.');
+        return partes.length > 1 ? partes.at(-1)?.toLowerCase() : undefined;
     };
 
-    const loadDocumento = async (id: string) => {
+    const isDocxPreviewDocument = (fileType?: string) => {
+        if (!fileType) return false;
+        return DOCX_PREVIEW_EXTENSIONS.has(fileType.toLowerCase());
+    };
+
+    const isLegacyWordDocument = (fileType?: string) => {
+        if (!fileType) return false;
+        return LEGACY_WORD_EXTENSIONS.has(fileType.toLowerCase());
+    };
+
+    const carregarPreviewDocumento = useCallback(async (doc: IDocumentoDB) => {
+        try {
+            setPreviewLoading(true);
+            setPreviewError(null);
+
+            const primeiroAnexo = doc.anexos?.find((anexo) => Boolean(anexo.url));
+
+            if (primeiroAnexo?.url) {
+                const signedUrl = await documentosService.gerarUrlDownloadAnexo(primeiroAnexo.url, 3600);
+                setPreviewDocumento({
+                    uri: signedUrl,
+                    fileName: primeiroAnexo.nome,
+                    fileType: obterExtensaoArquivo(primeiroAnexo.nome),
+                    source: 'anexo',
+                });
+                return;
+            }
+
+            try {
+                const signedUrl = await documentosService.gerarUrlDownloadPDF(doc.id, 3600);
+                setPreviewDocumento({
+                    uri: signedUrl,
+                    fileName: `${doc.numero || doc.id}.pdf`,
+                    fileType: 'pdf',
+                    source: 'pdf',
+                });
+                return;
+            } catch {
+                if (doc.conteudo?.trim()) {
+                    setPreviewDocumento(null);
+                    return;
+                }
+            }
+
+            setPreviewDocumento(null);
+            setPreviewError('Nenhum arquivo disponivel para pre-visualizacao.');
+        } catch (error) {
+            console.error('Erro ao carregar preview do documento:', error);
+            setPreviewDocumento(null);
+            setPreviewError('Nao foi possivel carregar a pre-visualizacao do arquivo.');
+        } finally {
+            setPreviewLoading(false);
+        }
+    }, []);
+
+    const loadDocumento = useCallback(async (id: string) => {
         try {
             setLoading(true);
+            setPreviewError(null);
             const doc = await documentosService.obterPorId(id);
             if (!doc) {
                 // handle not found
                 return;
             }
             setDocumento(doc);
+            await carregarPreviewDocumento(doc);
         } catch (error) {
             console.error('Erro ao carregar documento:', error);
         } finally {
             setLoading(false);
         }
-    };
+    }, [carregarPreviewDocumento]);
+
+    useEffect(() => {
+        if (params.id) {
+            loadDocumento(params.id as string);
+        }
+        checkAdmin();
+    }, [checkAdmin, loadDocumento, params.id]);
+
+    useEffect(() => {
+        docViewerRenderersPromise.then((renderers) => setDocViewerRenderers(renderers));
+    }, []);
+
+    useEffect(() => {
+        const renderDocxPreview = async () => {
+            if (!previewDocumento || !isDocxPreviewDocument(previewDocumento.fileType) || !docxPreviewContainerRef.current) {
+                setDocxPreviewReady(false);
+                return;
+            }
+
+            try {
+                setDocxPreviewReady(false);
+                docxPreviewContainerRef.current.innerHTML = '';
+
+                const response = await fetch(previewDocumento.uri);
+                if (!response.ok) {
+                    throw new Error('Nao foi possivel baixar o arquivo para preview.');
+                }
+
+                const arrayBuffer = await response.arrayBuffer();
+                await renderAsync(arrayBuffer, docxPreviewContainerRef.current, undefined, {
+                    className: 'docx-preview-render',
+                    inWrapper: true,
+                    ignoreWidth: false,
+                    ignoreHeight: true,
+                    useBase64URL: true,
+                    breakPages: true,
+                });
+
+                setDocxPreviewReady(true);
+            } catch (error) {
+                console.error('Erro ao renderizar preview DOCX/DOCM:', error);
+                setDocxPreviewReady(false);
+                setPreviewError('Nao foi possivel renderizar a pre-visualizacao deste documento Word.');
+            }
+        };
+
+        renderDocxPreview();
+    }, [previewDocumento]);
 
     const obterCorStatus = (status: string) => {
         switch (status) {
@@ -108,17 +226,95 @@ export default function DetalheDocumentoPage() {
         }
     };
 
-    const exportarDocx = () => {
-        alert('Exportação não implementada');
+    const escapeHtml = (value: string) => value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+
+    const abrirImpressaoPdf = (doc: IDocumentoDB) => {
+        const popup = window.open('', '_blank', 'noopener,noreferrer');
+
+        if (!popup) {
+            throw new Error('Nao foi possivel abrir a janela de impressao do PDF.');
+        }
+
+        const titulo = escapeHtml(doc.titulo || `Documento ${doc.numero || ''}`.trim());
+        const conteudo = escapeHtml(doc.conteudo || 'Conteudo nao disponivel.');
+
+        popup.document.write(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>${titulo}</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; color: #111827; }
+    h1 { margin: 0 0 8px; font-size: 24px; }
+    p.meta { margin: 0 0 24px; color: #6b7280; font-size: 14px; }
+    pre { white-space: pre-wrap; word-break: break-word; font-family: Arial, sans-serif; line-height: 1.6; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <h1>${titulo}</h1>
+  <p class="meta">Documento ${escapeHtml(doc.numero || '-')}</p>
+  <pre>${conteudo}</pre>
+</body>
+</html>`);
+        popup.document.close();
+        popup.focus();
+
+        window.setTimeout(() => {
+            popup.print();
+        }, 250);
     };
 
-    const baixarPDF = async () => {
+    const abrirDownload = (url: string) => {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = '';
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const baixarArquivo = async () => {
         if (!documento) return;
-        // Registrar o download no histórico
-        await documentosService.registrarDownload(documento.id);
-        // Recarregar o documento para atualizar o histórico na UI
-        loadDocumento(documento.id);
-        alert('Download iniciado! O registro foi salvo no histórico.');
+
+        try {
+            let signedUrl: string | null = null;
+
+            try {
+                const primeiroAnexo = documento.anexos?.find((anexo) => Boolean(anexo.url));
+
+                if (primeiroAnexo?.url) {
+                    signedUrl = await documentosService.gerarUrlDownloadAnexo(primeiroAnexo.url);
+                } else {
+                    signedUrl = await documentosService.gerarUrlDownloadPDF(documento.id);
+                }
+            } catch {
+                if (documento.conteudo?.trim()) {
+                    abrirImpressaoPdf(documento);
+                } else {
+                    throw new Error('Nenhum arquivo ou conteudo disponivel para exportacao.');
+                }
+            }
+
+            if (signedUrl) {
+                abrirDownload(signedUrl);
+            }
+
+            try {
+                await documentosService.registrarDownload(documento.id);
+                loadDocumento(documento.id);
+            } catch (logError) {
+                console.warn('Falha ao registrar log de download:', logError);
+            }
+        } catch (error) {
+            console.error('Erro ao baixar arquivo:', error);
+            alert('Não foi possível baixar o arquivo deste documento.');
+        }
     };
 
     if (loading) {
@@ -162,94 +358,74 @@ export default function DetalheDocumentoPage() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Button variant="outline" disabled>
-                        <Edit className="mr-2 h-4 w-4" />
-                        Editar
+                    <Button variant="outline" asChild>
+                        <Link href={`/documentos/${documento.id}/editar`}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Editar
+                        </Link>
                     </Button>
-                    <Button variant="outline" onClick={exportarDocx}>
-                        <FileDown className="mr-2 h-4 w-4" />
-                        Exportar DOCX
-                    </Button>
-                    <Button onClick={baixarPDF}>
+                    <Button onClick={baixarArquivo}>
                         <Download className="mr-2 h-4 w-4" />
-                        Baixar PDF
+                        Baixar Arquivo
                     </Button>
                 </div>
             </div>
 
             {/* Cards de Informações */}
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-                <Card>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <Card className="border-border bg-card shadow-sm">
                     <CardContent className="pt-4">
                         <div className="flex items-center gap-3">
-                            <div className="p-2 bg-indigo-500/10 rounded-lg">
-                                <Hash className="h-5 w-5 text-indigo-500" />
+                            <div className="rounded-lg bg-sky-500/15 p-2">
+                                <Hash className="h-5 w-5 text-sky-300" />
                             </div>
-                            <div>
+                            <div className="min-w-0">
                                 <p className="text-sm text-muted-foreground">Código</p>
-                                <p className="font-mono font-bold text-lg text-primary">{documento.numero || '-'}</p>
+                                <p className="font-mono text-lg font-bold tracking-wide text-sky-200">{documento.numero || '-'}</p>
                             </div>
                         </div>
                     </CardContent>
                 </Card>
-                <Card>
+                <Card className="border-border bg-card shadow-sm">
                     <CardContent className="pt-4">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 bg-primary/10 rounded-lg">
+                        <div className="flex items-start gap-3">
+                            <div className="rounded-lg bg-primary/10 p-2">
                                 <FolderOpen className="h-5 w-5 text-primary" />
                             </div>
-                            <div>
+                            <div className="min-w-0 flex-1">
                                 <p className="text-sm text-muted-foreground">Categoria</p>
-                                <p className="font-medium truncate" title={documento.categoria?.nome}>{documento.categoria?.nome || '-'}</p>
+                                <p className="break-words text-sm font-semibold leading-6 text-foreground" title={documento.categoria?.nome}>
+                                    {documento.categoria?.nome || '-'}
+                                </p>
                             </div>
                         </div>
                     </CardContent>
                 </Card>
-                <Card>
+                <Card className="border-border bg-card shadow-sm">
                     <CardContent className="pt-4">
                         <div className="flex items-center gap-3">
-                            <div className="p-2 bg-blue-500/10 rounded-lg">
+                            <div className="rounded-lg bg-blue-500/10 p-2">
                                 <Scale className="h-5 w-5 text-blue-500" />
                             </div>
-                            <div>
+                            <div className="min-w-0 flex-1">
                                 <p className="text-sm text-muted-foreground">Lei</p>
-                                <p className="font-medium truncate" title={documento.lei || documento.categoria?.lei || '-'}>{documento.lei || documento.categoria?.lei || '-'}</p>
+                                <p className="break-words text-sm font-semibold leading-6 text-foreground" title={documento.lei || documento.categoria?.lei || '-'}>
+                                    {documento.lei || documento.categoria?.lei || '-'}
+                                </p>
                             </div>
                         </div>
                     </CardContent>
                 </Card>
-                <Card>
+                <Card className="border-border bg-card shadow-sm">
                     <CardContent className="pt-4">
                         <div className="flex items-center gap-3">
-                            <div className="p-2 bg-green-500/10 rounded-lg">
+                            <div className="rounded-lg bg-green-500/10 p-2">
                                 <Calendar className="h-5 w-5 text-green-500" />
                             </div>
                             <div>
                                 <p className="text-sm text-muted-foreground">Criado em</p>
                                 <p className="font-medium">{formatDate(new Date(documento.created_at))}</p>
                             </div>
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="pt-4">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 bg-yellow-500/10 rounded-lg">
-                                <Zap className="h-5 w-5 text-yellow-500" />
-                            </div>
-                            <div>
-                                <p className="text-sm text-muted-foreground">Tokens</p>
-                                <p className="font-medium">{documento.tokens_utilizados?.toLocaleString() || 0}</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="pt-4">
-                        <div className="flex items-center gap-3">
-                            <Badge variant={obterCorStatus(documento.status)} className="text-base px-4 py-2 w-full justify-center">
-                                {documento.status}
-                            </Badge>
                         </div>
                     </CardContent>
                 </Card>
@@ -286,17 +462,62 @@ export default function DetalheDocumentoPage() {
                         <CardHeader>
                             <CardTitle>Preview do Documento</CardTitle>
                             <CardDescription>
-                                Visualização do conteúdo gerado - Vinculado ao Processo {documento.processo?.numero || 'N/A'}
+                                Pre-visualizacao do arquivo anexado ou do documento gerado - Vinculado ao Processo {documento.processo?.numero || 'N/A'}
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="prose dark:prose-invert max-w-none bg-muted/30 p-6 rounded-lg border">
-                                {documento.conteudo ? (
-                                    <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
-                                        {documento.conteudo}
-                                    </pre>
+                            <div className="rounded-lg border bg-muted/30 p-4">
+                                {previewLoading ? (
+                                    <div className="flex min-h-[420px] items-center justify-center text-muted-foreground">
+                                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                                    </div>
+                                ) : previewDocumento && isDocxPreviewDocument(previewDocumento.fileType) ? (
+                                    <div className="overflow-hidden rounded-md border bg-background">
+                                        <div className="border-b border-border bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
+                                            Preview Word local otimizado para arquivos DOCX, DOCM e formatos OOXML relacionados.
+                                        </div>
+                                        <div className="max-h-[720px] overflow-auto bg-neutral-100 p-6 dark:bg-slate-950">
+                                            <div
+                                                ref={docxPreviewContainerRef}
+                                                className="docx-preview-host mx-auto min-h-[600px] max-w-4xl bg-white shadow-sm"
+                                            />
+                                            {!docxPreviewReady && !previewError && (
+                                                <div className="flex min-h-[120px] items-center justify-center text-muted-foreground">
+                                                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ) : previewDocumento && isLegacyWordDocument(previewDocumento.fileType) ? (
+                                    <div className="rounded-md border bg-background p-6 text-sm text-muted-foreground">
+                                        Este arquivo esta em formato Word legado (`.{previewDocumento.fileType}`), que nao possui renderizacao local confiavel no navegador.
+                                        Use `Baixar Arquivo` para abrir no Word ou salve como `.docx`/`.docm` para habilitar preview completo no sistema.
+                                    </div>
+                                ) : previewDocumento && docViewerRenderers ? (
+                                    <div className="min-h-[420px] overflow-hidden rounded-md border bg-background">
+                                        <DocViewer
+                                            documents={[previewDocumento]}
+                                            initialActiveDocument={previewDocumento}
+                                            pluginRenderers={docViewerRenderers}
+                                            config={{
+                                                header: {
+                                                    disableHeader: true,
+                                                    disableFileName: true,
+                                                    retainURLParams: true,
+                                                },
+                                                pdfVerticalScrollByDefault: true,
+                                            }}
+                                            style={{ minHeight: '420px' }}
+                                        />
+                                    </div>
+                                ) : documento.conteudo ? (
+                                    <div className="prose dark:prose-invert max-w-none rounded-lg border bg-background p-6">
+                                        <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">
+                                            {documento.conteudo}
+                                        </pre>
+                                    </div>
                                 ) : (
-                                    <p className="text-muted-foreground text-center py-8">Conteúdo não disponível.</p>
+                                    <p className="py-8 text-center text-muted-foreground">{previewError || 'Conteúdo não disponível.'}</p>
                                 )}
                             </div>
                         </CardContent>
@@ -335,10 +556,6 @@ export default function DetalheDocumentoPage() {
                                     </div>
                                 </div>
                                 <div className="space-y-4">
-                                    <div>
-                                        <p className="text-sm text-muted-foreground">Especialista IA</p>
-                                        <p className="font-medium">{documento.especialista_id || '-'}</p>
-                                    </div>
                                     <div>
                                         <p className="text-sm text-muted-foreground">Tokens Utilizados</p>
                                         <p className="font-medium">{documento.tokens_utilizados?.toLocaleString()}</p>
@@ -380,9 +597,24 @@ export default function DetalheDocumentoPage() {
                                                 </div>
                                             </div>
                                             <div className="flex gap-2">
-                                                <Button variant="outline" size="sm">
-                                                    <Download className="mr-2 h-4 w-4" />
-                                                    Baixar
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={async () => {
+                                                        try {
+                                                            if (!anexo.url) {
+                                                                throw new Error('Anexo sem caminho de storage.');
+                                                            }
+                                                            const signedUrl = await documentosService.gerarUrlDownloadAnexo(anexo.url);
+                                                            abrirDownload(signedUrl);
+                                                        } catch (error) {
+                                                            console.error('Erro ao baixar anexo:', error);
+                                                            alert('Nao foi possivel baixar o anexo.');
+                                                        }
+                                                    }}
+                                                >
+                                                        <Download className="mr-2 h-4 w-4" />
+                                                        Baixar
                                                 </Button>
                                                 <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
                                                     <Trash2 className="h-4 w-4" />

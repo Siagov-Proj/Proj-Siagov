@@ -1,4 +1,5 @@
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { sanitizeSearchTerm } from "@/utils";
 
 export interface IProcessoDB {
     id: string;
@@ -36,8 +37,10 @@ export const processosService = {
             `)
             .order('created_at', { ascending: false });
 
-        if (termoBusca) {
-            query = query.or(`numero.ilike.%${termoBusca}%,assunto.ilike.%${termoBusca}%,interessado_nome.ilike.%${termoBusca}%`);
+        const termoSanitizado = termoBusca ? sanitizeSearchTerm(termoBusca) : '';
+
+        if (termoSanitizado) {
+            query = query.or(`numero.ilike.%${termoSanitizado}%,assunto.ilike.%${termoSanitizado}%,interessado_nome.ilike.%${termoSanitizado}%`);
         }
 
         const { data, error } = await query;

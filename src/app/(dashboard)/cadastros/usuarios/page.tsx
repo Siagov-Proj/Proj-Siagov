@@ -15,8 +15,10 @@ import {
 } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ListPagination } from '@/components/ui/list-pagination';
 import { Plus, Search, Pencil, Trash2, Users, ArrowLeft, Loader2 } from 'lucide-react';
 import { usuariosService, IUsuarioDB } from '@/services/api';
+import { useCadastroDialogs } from '@/components/cadastros/cadastro-dialog-provider';
 
 const PERFIS_USUARIO = [
     { value: 'admin', label: 'Administrador' },
@@ -26,11 +28,14 @@ const PERFIS_USUARIO = [
 ];
 
 export default function UsuariosPage() {
+    const itensPorPagina = 10;
     const router = useRouter();
+    const { showConfirm } = useCadastroDialogs();
     const [usuarios, setUsuarios] = useState<IUsuarioDB[]>([]);
     const [termoBusca, setTermoBusca] = useState('');
     const [loading, setLoading] = useState(true);
     const [deleting, setDeleting] = useState<string | null>(null);
+    const [paginaAtual, setPaginaAtual] = useState(1);
 
     const carregarUsuarios = useCallback(async () => {
         try {
@@ -51,6 +56,10 @@ export default function UsuariosPage() {
         return () => clearTimeout(debounce);
     }, [carregarUsuarios]);
 
+    useEffect(() => {
+        setPaginaAtual(1);
+    }, [termoBusca]);
+
     const handleNovo = () => {
         router.push('/cadastros/usuarios/novo');
     };
@@ -60,17 +69,24 @@ export default function UsuariosPage() {
     };
 
     const handleDelete = async (id: string) => {
-        if (confirm('Tem certeza que deseja excluir este usuário?')) {
-            try {
-                setDeleting(id);
-                await usuariosService.excluir(id);
-                setUsuarios(usuarios.filter((u) => u.id !== id));
-            } catch (err) {
-                console.error('Erro ao excluir usuário:', err);
-                alert('Erro ao excluir usuário. Tente novamente.');
-            } finally {
-                setDeleting(null);
-            }
+        if (!await showConfirm({
+            title: 'Excluir usuário',
+            description: 'Tem certeza que deseja excluir este usuário?',
+            confirmLabel: 'Excluir',
+            variant: 'danger',
+        })) {
+            return;
+        }
+
+        try {
+            setDeleting(id);
+            await usuariosService.excluir(id);
+            setUsuarios(usuarios.filter((u) => u.id !== id));
+        } catch (err) {
+            console.error('Erro ao excluir usuário:', err);
+            alert('Erro ao excluir usuário. Tente novamente.');
+        } finally {
+            setDeleting(null);
         }
     };
 
@@ -79,6 +95,8 @@ export default function UsuariosPage() {
         const perfil = PERFIS_USUARIO.find((p) => permissoes.includes(p.value));
         return perfil?.label || 'Sem perfil';
     };
+
+    const usuariosPaginados = usuarios.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
 
     return (
         <div className="space-y-6">
@@ -152,7 +170,7 @@ export default function UsuariosPage() {
                                             </TableCell>
                                         </TableRow>
                                     ) : (
-                                        usuarios.map((usuario) => (
+                                        usuariosPaginados.map((usuario) => (
                                             <TableRow key={usuario.id}>
                                                 <TableCell>
                                                     <div className="flex flex-col">
@@ -194,6 +212,7 @@ export default function UsuariosPage() {
                             </Table>
                         </div>
                     )}
+                    <ListPagination currentPage={paginaAtual} totalItems={usuarios.length} itemsPerPage={itensPorPagina} onPageChange={setPaginaAtual} itemLabel="usuários" />
                 </CardContent>
             </Card>
         </div>

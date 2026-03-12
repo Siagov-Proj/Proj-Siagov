@@ -15,15 +15,21 @@ import {
 } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ListPagination } from '@/components/ui/list-pagination';
 import { Plus, Search, Pencil, Trash2, Building2, ArrowLeft, Loader2 } from 'lucide-react';
 import { instituicoesService, IInstituicaoDB } from '@/services/api';
+import { SmartDeleteDialog } from '@/components/SmartDeleteDialog';
 
 export default function InstituicoesPage() {
+    const itensPorPagina = 10;
     const router = useRouter();
     const [instituicoes, setInstituicoes] = useState<IInstituicaoDB[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
     const [deleting, setDeleting] = useState<string | null>(null);
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [itemToDelete, setItemToDelete] = useState<{ id: string; nome: string } | null>(null);
+    const [paginaAtual, setPaginaAtual] = useState(1);
 
     const carregarInstituicoes = useCallback(async () => {
         try {
@@ -44,6 +50,10 @@ export default function InstituicoesPage() {
         return () => clearTimeout(debounce);
     }, [carregarInstituicoes]);
 
+    useEffect(() => {
+        setPaginaAtual(1);
+    }, [searchTerm]);
+
     const handleNovo = () => {
         router.push('/cadastros/instituicoes/novo');
     };
@@ -52,26 +62,26 @@ export default function InstituicoesPage() {
         router.push(`/cadastros/instituicoes/${id}`);
     };
 
-    const handleDelete = async (id: string) => {
-        if (confirm('Tem certeza que deseja excluir esta instituição?')) {
-            try {
-                setDeleting(id);
-                // Check for linked orgaos
-                const count = await instituicoesService.contarOrgaos(id);
-                if (count > 0) {
-                    alert(`Não é possível excluir. Existem ${count} órgão(s) vinculado(s) a esta instituição.`);
-                    return;
-                }
-                await instituicoesService.excluir(id);
-                setInstituicoes(instituicoes.filter((i) => i.id !== id));
-            } catch (err) {
-                console.error('Erro ao excluir instituição:', err);
-                alert('Erro ao excluir instituição. Tente novamente.');
-            } finally {
-                setDeleting(null);
-            }
+    const handleDeleteClick = (inst: IInstituicaoDB) => {
+        setItemToDelete({ id: inst.id, nome: inst.nome });
+        setDeleteModalOpen(true);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!itemToDelete) return;
+        try {
+            setDeleting(itemToDelete.id);
+            await instituicoesService.excluir(itemToDelete.id);
+            setInstituicoes(instituicoes.filter((i) => i.id !== itemToDelete.id));
+        } catch (err: unknown) {
+            console.error('Erro ao excluir instituição:', err);
+            alert(getErrorMessage(err));
+        } finally {
+            setDeleting(null);
         }
     };
+
+    const instituicoesPaginadas = instituicoes.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
 
     return (
         <div className="space-y-6">
@@ -146,7 +156,7 @@ export default function InstituicoesPage() {
                                             </TableCell>
                                         </TableRow>
                                     ) : (
-                                        instituicoes.map((inst) => (
+                                        instituicoesPaginadas.map((inst) => (
                                             <TableRow key={inst.id}>
                                                 <TableCell className="font-mono">{inst.codigo}</TableCell>
                                                 <TableCell className="font-medium">{inst.nome}</TableCell>
@@ -167,7 +177,7 @@ export default function InstituicoesPage() {
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
-                                                            onClick={() => handleDelete(inst.id)}
+                                                            onClick={() => handleDeleteClick(inst)}
                                                             className="text-red-500 hover:text-red-600"
                                                             disabled={deleting === inst.id}
                                                         >
@@ -186,8 +196,20 @@ export default function InstituicoesPage() {
                             </Table>
                         </div>
                     )}
+                    <ListPagination currentPage={paginaAtual} totalItems={instituicoes.length} itemsPerPage={itensPorPagina} onPageChange={setPaginaAtual} itemLabel="instituições" />
                 </CardContent>
             </Card>
+
+            {itemToDelete && (
+                <SmartDeleteDialog
+                    open={deleteModalOpen}
+                    onOpenChange={setDeleteModalOpen}
+                    title={`Excluir Instituição: ${itemToDelete.nome}`}
+                    onConfirm={handleConfirmDelete}
+                    onCheckDependencies={() => instituicoesService.verificarDependencias(itemToDelete.id)}
+                />
+            )}
         </div>
     );
 }
+    const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : 'Erro ao excluir instituição. Tente novamente.';

@@ -4,6 +4,7 @@
  */
 
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { sanitizeSearchTerm } from "@/utils";
 
 export interface IBancoDB {
     id: string;
@@ -28,8 +29,10 @@ export const bancosService = {
             .eq('excluido', false)
             .order('nome', { ascending: true });
 
-        if (termoBusca) {
-            query = query.or(`nome.ilike.%${termoBusca}%,nome_abreviado.ilike.%${termoBusca}%,codigo.ilike.%${termoBusca}%`);
+        const termoSanitizado = termoBusca ? sanitizeSearchTerm(termoBusca) : '';
+
+        if (termoSanitizado) {
+            query = query.or(`nome.ilike.%${termoSanitizado}%,nome_abreviado.ilike.%${termoSanitizado}%,codigo.ilike.%${termoSanitizado}%`);
         }
 
         const { data, error } = await query;

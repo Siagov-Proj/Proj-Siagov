@@ -30,9 +30,9 @@ RETURNS TRIGGER AS $$
 DECLARE
     current_user_id UUID;
 BEGIN
-    -- Try to get the user ID from the Supabase JWT claims
+    -- Try to get the user ID from Supabase auth context
     BEGIN
-        current_user_id := (current_setting('request.jwt.claims', true)::jsonb ->> 'sub')::UUID;
+        current_user_id := auth.uid();
     EXCEPTION WHEN OTHERS THEN
         current_user_id := NULL;
     END;

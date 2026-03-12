@@ -16,6 +16,7 @@ import {
 import { ActionBar } from '@/components/ui/action-bar';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { maskCnpj, maskCodigoComZeros } from '@/utils/masks';
+import { validateCnpj } from '@/utils/formatters';
 import { PODERES, FIELD_LIMITS } from '@/utils/constants';
 import type { IOrgao } from '@/types';
 import { ArrowLeft, Loader2 } from 'lucide-react';
@@ -77,11 +78,12 @@ export default function NovoOrgaoPage() {
     const validate = (): boolean => {
         const newErrors: Record<string, string> = {};
 
-        if (!formData.codigo) newErrors.codigo = 'Código é obrigatório';
+        if (!/^\d{6}$/.test(formData.codigo)) newErrors.codigo = 'Codigo deve conter 6 digitos';
         if (!formData.instituicaoId) newErrors.instituicaoId = 'Instituição é obrigatória';
         if (!formData.poderVinculado) newErrors.poderVinculado = 'Poder Vinculado é obrigatório';
         if (!formData.nome) newErrors.nome = 'Nome é obrigatório';
         if (!formData.sigla) newErrors.sigla = 'Sigla é obrigatória';
+        if (formData.cnpj && !validateCnpj(formData.cnpj)) newErrors.cnpj = 'CNPJ invalido';
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -90,10 +92,11 @@ export default function NovoOrgaoPage() {
     const [saving, setSaving] = useState(false);
 
     const handleSalvar = async () => {
+        if (saving) return;
         if (!validate()) return;
 
+        setSaving(true);
         try {
-            setSaving(true);
             await orgaosService.criar({
                 codigo: formData.codigo,
                 instituicao_id: formData.instituicaoId,
@@ -189,13 +192,12 @@ export default function NovoOrgaoPage() {
                                     <Input
                                         id="codigo"
                                         value={formData.codigo}
-                                        onChange={(e) =>
-                                            setFormData({ ...formData, codigo: maskCodigoComZeros(e.target.value, 6) })
-                                        }
+                                        onChange={(e) => setFormData({ ...formData, codigo: maskCodigoComZeros(e.target.value, 6) })}
                                         maxLength={6}
                                         placeholder={loadingCodigo ? 'Gerando...' : '000001'}
                                         className={`font-mono ${errors.codigo ? 'border-red-500' : ''}`}
                                         disabled={loadingCodigo}
+                                        readOnly
                                     />
                                     {loadingCodigo && (
                                         <Loader2 className="absolute right-3 top-3 h-4 w-4 animate-spin text-muted-foreground" />
@@ -283,7 +285,9 @@ export default function NovoOrgaoPage() {
                                     onChange={(e) => setFormData({ ...formData, cnpj: maskCnpj(e.target.value) })}
                                     maxLength={18}
                                     placeholder="00.000.000/0001-00"
+                                    className={errors.cnpj ? 'border-red-500' : ''}
                                 />
+                                {errors.cnpj && <p className="text-sm text-red-500">{errors.cnpj}</p>}
                             </div>
                         </div>
                     </div>

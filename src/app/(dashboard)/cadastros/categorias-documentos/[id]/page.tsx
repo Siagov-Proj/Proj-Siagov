@@ -414,12 +414,12 @@ export default function EditarCategoriaPage() {
                         <div className="flex-1 space-y-2">
                             <h4 className="text-sm font-semibold">Documentos</h4>
                             <p className="text-sm text-muted-foreground">
-                                Você pode criar novos documentos vinculados diretamente a esta categoria. Todo o gerenciamento da versão final dos documentos é feito na raiz do módulo de Documentos.
+                                Você pode criar novos documentos vinculados diretamente a esta categoria dentro do módulo de Normativos.
                             </p>
                         </div>
                         <div className="flex items-center">
                             <Button size="sm" className="gap-2 bg-blue-600 hover:bg-blue-700" asChild>
-                                <Link href={`/documentos/novo?categoriaId=${params.id as string}`}>
+                                <Link href={`/cadastros/normativos/documentos/novo?categoriaId=${params.id as string}`}>
                                     <FilePlus className="h-4 w-4" />
                                     Criar Documento
                                 </Link>

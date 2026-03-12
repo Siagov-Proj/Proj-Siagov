@@ -1,5 +1,6 @@
 
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { sanitizeSearchTerm } from "@/utils";
 
 export interface IChamadoDB {
     id: string;
@@ -21,6 +22,22 @@ export interface IChamadoDB {
     mensagens_count?: number;
 }
 
+interface IChamadoMensagemCount {
+    count?: number;
+}
+
+interface IChamadoComMensagens extends IChamadoDB {
+    mensagens?: IChamadoMensagemCount[];
+}
+
+export interface IChamadoMensagemDB {
+    id: string;
+    chamado_id: string;
+    mensagem: string;
+    created_at: string;
+    updated_at?: string;
+}
+
 const TABLE_NAME = 'chamados';
 
 export const chamadosService = {
@@ -33,8 +50,10 @@ export const chamadosService = {
             .eq('excluido', false)
             .order('created_at', { ascending: false });
 
-        if (filtros?.termo) {
-            query = query.or(`assunto.ilike.%${filtros.termo}%,protocolo.ilike.%${filtros.termo}%`);
+        const termoSanitizado = filtros?.termo ? sanitizeSearchTerm(filtros.termo) : '';
+
+        if (termoSanitizado) {
+            query = query.or(`assunto.ilike.%${termoSanitizado}%,protocolo.ilike.%${termoSanitizado}%`);
         }
         if (filtros?.categoria && filtros.categoria !== 'todos') {
             query = query.eq('categoria', filtros.categoria);
@@ -50,7 +69,7 @@ export const chamadosService = {
             return [];
         }
 
-        return data.map((d: any) => ({
+        return (data as IChamadoComMensagens[]).map((d) => ({
             ...d,
             mensagens_count: d.mensagens?.[0]?.count || 0
         }));
@@ -68,7 +87,7 @@ export const chamadosService = {
         return data;
     },
 
-    async listarMensagens(chamadoId: string): Promise<any[]> {
+    async listarMensagens(chamadoId: string): Promise<IChamadoMensagemDB[]> {
         const supabase = getSupabaseClient();
         const { data, error } = await supabase
             .from('chamado_mensagens')

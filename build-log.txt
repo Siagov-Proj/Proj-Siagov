@@ -1,0 +1,94 @@
+
+> siagov-next@0.1.0 build
+> next build
+
+▲ Next.js 16.1.6 (Turbopack)
+- Environments: .env.local
+- Experiments (use with caution):
+  · serverActions
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 7.6s
+  Running TypeScript ...
+  Collecting page data using 15 workers ...
+  Generating static pages using 15 workers (0/50) ...
+ReferenceError: location is not defined
+    at o (C:\Users\JoãoVictorRibeiroLag\Documents\Projetos Highcode\Projeto Siagov\siagov-next\.next\server\chunks\ssr\[root-of-the-server]__00164b49._.js:1:17116)
+  Generating static pages using 15 workers (12/50) 
+  Generating static pages using 15 workers (24/50) 
+  Generating static pages using 15 workers (37/50) 
+✓ Generating static pages using 15 workers (50/50) in 1076.7ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /auth/callback
+├ ○ /auth/error
+├ ○ /cadastros
+├ ○ /cadastros/agencias
+├ ƒ /cadastros/agencias/[id]
+├ ○ /cadastros/agencias/novo
+├ ○ /cadastros/auditoria
+├ ○ /cadastros/bancos
+├ ƒ /cadastros/bancos/[id]
+├ ○ /cadastros/bancos/novo
+├ ○ /cadastros/cargos
+├ ƒ /cadastros/cargos/[id]
+├ ○ /cadastros/cargos/novo
+├ ○ /cadastros/categorias-documentos
+├ ƒ /cadastros/categorias-documentos/[id]
+├ ƒ /cadastros/categorias-documentos/[id]/subcategoria/[subId]
+├ ƒ /cadastros/categorias-documentos/[id]/subcategoria/novo
+├ ○ /cadastros/categorias-documentos/novo
+├ ○ /cadastros/credores
+├ ƒ /cadastros/credores/[id]
+├ ○ /cadastros/credores/novo
+├ ○ /cadastros/esferas
+├ ƒ /cadastros/esferas/[id]
+├ ○ /cadastros/esferas/novo
+├ ○ /cadastros/exercicios
+├ ƒ /cadastros/exercicios/[id]
+├ ○ /cadastros/exercicios/novo
+├ ○ /cadastros/instituicoes
+├ ƒ /cadastros/instituicoes/[id]
+├ ○ /cadastros/instituicoes/novo
+├ ○ /cadastros/normativos
+├ ○ /cadastros/normativos/novo
+├ ○ /cadastros/orgaos
+├ ƒ /cadastros/orgaos/[id]
+├ ○ /cadastros/orgaos/novo
+├ ○ /cadastros/setores
+├ ƒ /cadastros/setores/[id]
+├ ○ /cadastros/setores/novo
+├ ○ /cadastros/unidades
+├ ƒ /cadastros/unidades/[id]
+├ ○ /cadastros/unidades/novo
+├ ○ /cadastros/usuarios
+├ ƒ /cadastros/usuarios/[id]
+├ ○ /cadastros/usuarios/novo
+├ ○ /chamados
+├ ƒ /chamados/[id]
+├ ○ /chamados/novo
+├ ○ /configuracoes
+├ ○ /dashboard
+├ ○ /definir-senha
+├ ○ /documentos
+├ ƒ /documentos/[id]
+├ ○ /documentos/novo
+├ ○ /esqueci-senha
+├ ○ /login
+├ ○ /processos
+├ ƒ /processos/[id]
+├ ƒ /processos/[id]/tramitar
+├ ○ /processos/novo
+├ ○ /redefinir-senha
+├ ○ /relatorios
+├ ○ /relatorios/consumo
+├ ○ /relatorios/desempenho
+└ ○ /selecionar-instituicao
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

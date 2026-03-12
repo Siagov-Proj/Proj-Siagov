@@ -27,6 +27,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { ListPagination } from '@/components/ui/list-pagination';
 import { Plus, Search, Eye, MessageSquare, Clock, CheckCircle, AlertCircle, HelpCircle } from 'lucide-react';
 import { formatDateBR } from '@/utils/formatters';
 import { chamadosService, IChamadoDB } from '@/services/api/chamadosService';
@@ -48,14 +49,14 @@ const STATUS = [
 ];
 
 export default function ChamadosPage() {
+    const itensPorPagina = 10;
     const [chamados, setChamados] = useState<IChamadoDB[]>([]);
-    const [loading, setLoading] = useState(true);
     const [termoBusca, setTermoBusca] = useState('');
     const [filtroCategoria, setFiltroCategoria] = useState('todos');
     const [filtroStatus, setFiltroStatus] = useState('todos');
+    const [paginaAtual, setPaginaAtual] = useState(1);
 
     const carregarChamados = useCallback(async () => {
-        setLoading(true);
         try {
             const data = await chamadosService.listar({
                 termo: termoBusca,
@@ -65,14 +66,18 @@ export default function ChamadosPage() {
             setChamados(data);
         } catch (error) {
             console.error('Erro ao carregar chamados:', error);
-        } finally {
-            setLoading(false);
         }
     }, [termoBusca, filtroCategoria, filtroStatus]);
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         carregarChamados();
     }, [carregarChamados]);
+
+    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setPaginaAtual(1);
+    }, [termoBusca, filtroCategoria, filtroStatus]);
 
     // Estatísticas
     const stats = {
@@ -89,6 +94,7 @@ export default function ChamadosPage() {
     // Note: Filtering is now handled by the backend service.
     // 'chamados' state already contains filtered data.
     const chamadosFiltrados = chamados;
+    const chamadosPaginados = chamadosFiltrados.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
 
     const obterCorStatus = (status: string) => {
         switch (status) {
@@ -258,7 +264,7 @@ export default function ChamadosPage() {
                                         </TableCell>
                                     </TableRow>
                                 ) : (
-                                    chamadosFiltrados.map((chamado) => (
+                                    chamadosPaginados.map((chamado) => (
                                         <TableRow key={chamado.id} className="cursor-pointer hover:bg-muted/50">
                                             <TableCell className="font-mono text-sm">
                                                 #{chamado.protocolo}
@@ -313,6 +319,7 @@ export default function ChamadosPage() {
                             </TableBody>
                         </Table>
                     </div>
+                    <ListPagination currentPage={paginaAtual} totalItems={chamadosFiltrados.length} itemsPerPage={itensPorPagina} onPageChange={setPaginaAtual} itemLabel="chamados" />
                 </CardContent>
             </Card>
         </div>

@@ -5,8 +5,8 @@ export interface IAuditLog {
     table_name: string;
     record_id: string;
     action: 'INSERT' | 'UPDATE' | 'DELETE';
-    old_data: any | null;
-    new_data: any | null;
+    old_data: Record<string, unknown> | null;
+    new_data: Record<string, unknown> | null;
     changed_by: string | null;
     created_at: string;
     usuario?: {

@@ -24,12 +24,14 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Plus, Pencil, Trash2, Scale, Loader2, Save, X } from 'lucide-react';
 import { leisNormativasService, ILeiNormativaDB } from '@/services/api';
+import { useCadastroDialogs } from '@/components/cadastros/cadastro-dialog-provider';
 
 interface LeisCadastroDialogProps {
     onLeisChanged?: () => void;
 }
 
 export function LeisCadastroDialog({ onLeisChanged }: LeisCadastroDialogProps) {
+    const { showConfirm } = useCadastroDialogs();
     const [open, setOpen] = useState(false);
     const [leis, setLeis] = useState<ILeiNormativaDB[]>([]);
     const [loading, setLoading] = useState(false);
@@ -114,7 +116,12 @@ export function LeisCadastroDialog({ onLeisChanged }: LeisCadastroDialogProps) {
     };
 
     const handleExcluir = async (id: string) => {
-        if (!confirm('Tem certeza que deseja excluir esta lei?')) return;
+        if (!await showConfirm({
+            title: 'Excluir lei normativa',
+            description: 'Tem certeza que deseja excluir esta lei?',
+            confirmLabel: 'Excluir',
+            variant: 'danger',
+        })) return;
 
         try {
             setDeleting(id);
@@ -137,8 +144,8 @@ export function LeisCadastroDialog({ onLeisChanged }: LeisCadastroDialogProps) {
                     Gerenciar Leis
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
-                <DialogHeader>
+            <DialogContent className="max-h-[90vh] !w-[1200px] !max-w-[calc(100vw-3rem)] overflow-hidden p-0">
+                <DialogHeader className="px-4 pt-4 sm:px-6 sm:pt-6">
                     <DialogTitle className="flex items-center gap-2">
                         <Scale className="h-5 w-5" />
                         Gerenciar Leis Normativas
@@ -148,10 +155,10 @@ export function LeisCadastroDialog({ onLeisChanged }: LeisCadastroDialogProps) {
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-4">
+                <div className="space-y-4 overflow-y-auto px-4 pb-4 sm:px-6 sm:pb-6">
                     {/* Formulário de adicionar/editar */}
                     {mostrarForm ? (
-                        <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
+                        <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
                             <h4 className="text-sm font-medium">
                                 {editandoId ? 'Editar Lei' : 'Nova Lei'}
                             </h4>
@@ -180,7 +187,7 @@ export function LeisCadastroDialog({ onLeisChanged }: LeisCadastroDialogProps) {
                                     onChange={(e) => setFormDescricao(e.target.value)}
                                 />
                             </div>
-                            <div className="flex items-center gap-2 pt-1">
+                            <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center">
                                 <Button
                                     size="sm"
                                     onClick={handleSalvar}
@@ -228,11 +235,12 @@ export function LeisCadastroDialog({ onLeisChanged }: LeisCadastroDialogProps) {
                                 Nenhuma lei cadastrada.
                             </div>
                         ) : (
-                            <Table>
+                            <div className="max-w-full overflow-x-hidden">
+                            <Table className="table-fixed">
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>Nome</TableHead>
-                                        <TableHead>Descrição</TableHead>
+                                        <TableHead className="w-[22%]">Nome</TableHead>
+                                        <TableHead className="w-[58%]">Descrição</TableHead>
                                         <TableHead className="w-[80px] text-center">Status</TableHead>
                                         <TableHead className="w-[80px] text-center">Ações</TableHead>
                                     </TableRow>
@@ -240,9 +248,13 @@ export function LeisCadastroDialog({ onLeisChanged }: LeisCadastroDialogProps) {
                                 <TableBody>
                                     {leis.map((lei) => (
                                         <TableRow key={lei.id}>
-                                            <TableCell className="font-medium">{lei.nome}</TableCell>
-                                            <TableCell className="text-sm text-muted-foreground">
-                                                {lei.descricao || '-'}
+                                            <TableCell className="font-medium whitespace-normal break-words">
+                                                <span className="block" title={lei.nome}>{lei.nome}</span>
+                                            </TableCell>
+                                            <TableCell className="text-sm text-muted-foreground whitespace-normal break-words">
+                                                <span className="block" title={lei.descricao || '-'}>
+                                                    {lei.descricao || '-'}
+                                                </span>
                                             </TableCell>
                                             <TableCell className="text-center">
                                                 <Badge
@@ -285,11 +297,12 @@ export function LeisCadastroDialog({ onLeisChanged }: LeisCadastroDialogProps) {
                                     ))}
                                 </TableBody>
                             </Table>
+                            </div>
                         )}
                     </div>
                 </div>
 
-                <DialogFooter>
+                <DialogFooter className="border-t px-4 py-4 sm:px-6">
                     <Button variant="outline" onClick={() => setOpen(false)}>
                         Fechar
                     </Button>

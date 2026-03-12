@@ -4,6 +4,7 @@
  */
 
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { sanitizeSearchTerm } from "@/utils";
 
 export interface IUnidadeGestoraDB {
     id: string;
@@ -49,8 +50,10 @@ export const unidadesService = {
             .eq('excluido', false)
             .order('nome', { ascending: true });
 
-        if (termoBusca) {
-            query = query.or(`nome.ilike.%${termoBusca}%,nome_abreviado.ilike.%${termoBusca}%,codigo.ilike.%${termoBusca}%`);
+        const termoSanitizado = termoBusca ? sanitizeSearchTerm(termoBusca) : '';
+
+        if (termoSanitizado) {
+            query = query.or(`nome.ilike.%${termoSanitizado}%,nome_abreviado.ilike.%${termoSanitizado}%,codigo.ilike.%${termoSanitizado}%`);
         }
 
         const { data, error } = await query;
@@ -120,7 +123,45 @@ export const unidadesService = {
         return data as IUnidadeGestoraDB;
     },
 
+    async verificarDependencias(id: string): Promise<{ podeExcluir: boolean; relatorios: string[] }> {
+        const supabase = getSupabaseClient();
+        const relatorios: string[] = [];
+
+        const [setoresResult, usuariosResult, lotacoesResult, ordenadoresResult] = await Promise.all([
+            supabase.from('setores').select('*', { count: 'exact', head: true }).eq('unidade_gestora_id', id).eq('excluido', false),
+            supabase.from('usuarios').select('*', { count: 'exact', head: true }).eq('unidade_gestora_id', id).eq('excluido', false),
+            supabase.from('usuario_lotacoes').select('*', { count: 'exact', head: true }).eq('unidade_gestora_id', id).eq('excluido', false),
+            supabase.from('ordenadores_despesa').select('*', { count: 'exact', head: true }).eq('unidade_gestora_id', id),
+        ]);
+
+        if (setoresResult.count && setoresResult.count > 0) {
+            relatorios.push(`${setoresResult.count} setor(es) vinculado(s)`);
+        }
+
+        if (usuariosResult.count && usuariosResult.count > 0) {
+            relatorios.push(`${usuariosResult.count} usuario(s) vinculado(s)`);
+        }
+
+        if (lotacoesResult.count && lotacoesResult.count > 0) {
+            relatorios.push(`${lotacoesResult.count} lotacao(oes) vinculada(s)`);
+        }
+
+        if (ordenadoresResult.count && ordenadoresResult.count > 0) {
+            relatorios.push(`${ordenadoresResult.count} ordenador(es) vinculado(s)`);
+        }
+
+        return {
+            podeExcluir: relatorios.length === 0,
+            relatorios,
+        };
+    },
+
     async excluir(id: string): Promise<void> {
+        const dependencias = await this.verificarDependencias(id);
+        if (!dependencias.podeExcluir) {
+            throw new Error(`Nao e possivel excluir. Dependencias ativas: ${dependencias.relatorios.join(', ')}`);
+        }
+
         const supabase = getSupabaseClient();
         const { error } = await supabase
             .from(TABLE_NAME)

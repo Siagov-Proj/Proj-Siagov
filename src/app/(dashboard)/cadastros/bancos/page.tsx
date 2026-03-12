@@ -14,15 +14,20 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ListPagination } from '@/components/ui/list-pagination';
 import { Plus, Search, Pencil, Trash2, CreditCard, ArrowLeft, Loader2 } from 'lucide-react';
 import { bancosService, IBancoDB } from '@/services/api';
+import { useCadastroDialogs } from '@/components/cadastros/cadastro-dialog-provider';
 
 export default function BancosPage() {
+    const itensPorPagina = 10;
     const router = useRouter();
+    const { showConfirm } = useCadastroDialogs();
     const [bancos, setBancos] = useState<IBancoDB[]>([]);
     const [termoBusca, setTermoBusca] = useState('');
     const [loading, setLoading] = useState(true);
     const [deleting, setDeleting] = useState<string | null>(null);
+    const [paginaAtual, setPaginaAtual] = useState(1);
 
     const carregarBancos = useCallback(async () => {
         try {
@@ -43,6 +48,12 @@ export default function BancosPage() {
         return () => clearTimeout(debounce);
     }, [carregarBancos]);
 
+    useEffect(() => {
+        setPaginaAtual(1);
+    }, [termoBusca]);
+
+    const bancosPaginados = bancos.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
+
     const handleNovo = () => {
         router.push('/cadastros/bancos/novo');
     };
@@ -52,23 +63,30 @@ export default function BancosPage() {
     };
 
     const handleDelete = async (id: string) => {
-        if (confirm('Tem certeza que deseja excluir este banco?')) {
-            try {
-                setDeleting(id);
-                // Check for linked agencias
-                const count = await bancosService.contarAgencias(id);
-                if (count > 0) {
-                    alert(`Não é possível excluir. Existem ${count} agência(s) vinculada(s) a este banco.`);
-                    return;
-                }
-                await bancosService.excluir(id);
-                setBancos(bancos.filter((b) => b.id !== id));
-            } catch (err) {
-                console.error('Erro ao excluir banco:', err);
-                alert('Erro ao excluir banco. Tente novamente.');
-            } finally {
-                setDeleting(null);
+        if (!await showConfirm({
+            title: 'Excluir banco',
+            description: 'Tem certeza que deseja excluir este banco?',
+            confirmLabel: 'Excluir',
+            variant: 'danger',
+        })) {
+            return;
+        }
+
+        try {
+            setDeleting(id);
+            // Check for linked agencias
+            const count = await bancosService.contarAgencias(id);
+            if (count > 0) {
+                alert(`Não é possível excluir. Existem ${count} agência(s) vinculada(s) a este banco.`);
+                return;
             }
+            await bancosService.excluir(id);
+            setBancos(bancos.filter((b) => b.id !== id));
+        } catch (err) {
+            console.error('Erro ao excluir banco:', err);
+            alert('Erro ao excluir banco. Tente novamente.');
+        } finally {
+            setDeleting(null);
         }
     };
 
@@ -144,7 +162,7 @@ export default function BancosPage() {
                                             </TableCell>
                                         </TableRow>
                                     ) : (
-                                        bancos.map((banco) => (
+                                        bancosPaginados.map((banco) => (
                                             <TableRow key={banco.id}>
                                                 <TableCell className="font-mono">{banco.codigo}</TableCell>
                                                 <TableCell className="font-medium">{banco.nome}</TableCell>
@@ -181,6 +199,7 @@ export default function BancosPage() {
                             </Table>
                         </div>
                     )}
+                    <ListPagination currentPage={paginaAtual} totalItems={bancos.length} itemsPerPage={itensPorPagina} onPageChange={setPaginaAtual} itemLabel="bancos" />
                 </CardContent>
             </Card>
         </div>

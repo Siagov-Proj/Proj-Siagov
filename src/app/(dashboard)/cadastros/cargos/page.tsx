@@ -14,6 +14,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ListPagination } from '@/components/ui/list-pagination';
 import {
     Tooltip,
     TooltipContent,
@@ -22,14 +23,19 @@ import {
 } from '@/components/ui/tooltip';
 import { Plus, Search, Pencil, Trash2, UserCheck, ArrowLeft, Loader2 } from 'lucide-react';
 import { cargosService, ICargoDB, permissoesService, IPermissaoDB } from '@/services/api';
+import { SmartDeleteDialog } from '@/components/SmartDeleteDialog';
 
 export default function CargosPage() {
+    const itensPorPagina = 10;
     const router = useRouter();
     const [cargos, setCargos] = useState<ICargoDB[]>([]);
     const [termoBusca, setTermoBusca] = useState('');
     const [loading, setLoading] = useState(true);
     const [deleting, setDeleting] = useState<string | null>(null);
     const [permissoesPorCargo, setPermissoesPorCargo] = useState<Record<string, IPermissaoDB[]>>({});
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [itemToDelete, setItemToDelete] = useState<{ id: string; nome: string } | null>(null);
+    const [paginaAtual, setPaginaAtual] = useState(1);
 
     const carregarCargos = useCallback(async () => {
         try {
@@ -59,6 +65,10 @@ export default function CargosPage() {
         return () => clearTimeout(debounce);
     }, [carregarCargos]);
 
+    useEffect(() => {
+        setPaginaAtual(1);
+    }, [termoBusca]);
+
     const handleNovo = () => {
         router.push('/cadastros/cargos/novo');
     };
@@ -67,18 +77,22 @@ export default function CargosPage() {
         router.push(`/cadastros/cargos/${id}`);
     };
 
-    const handleDelete = async (id: string) => {
-        if (confirm('Tem certeza que deseja excluir este cargo?')) {
-            try {
-                setDeleting(id);
-                await cargosService.excluir(id);
-                setCargos(cargos.filter((c) => c.id !== id));
-            } catch (err) {
-                console.error('Erro ao excluir cargo:', err);
-                alert('Erro ao excluir cargo. Tente novamente.');
-            } finally {
-                setDeleting(null);
-            }
+    const handleDeleteClick = (cargo: ICargoDB) => {
+        setItemToDelete({ id: cargo.id, nome: cargo.nome });
+        setDeleteModalOpen(true);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!itemToDelete) return;
+        try {
+            setDeleting(itemToDelete.id);
+            await cargosService.excluir(itemToDelete.id);
+            setCargos(cargos.filter((c) => c.id !== itemToDelete.id));
+        } catch (err: unknown) {
+            console.error('Erro ao excluir cargo:', err);
+            alert(getErrorMessage(err));
+        } finally {
+            setDeleting(null);
         }
     };
 
@@ -92,6 +106,8 @@ export default function CargosPage() {
         });
         return grupos;
     };
+
+    const cargosPaginados = cargos.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
 
     return (
         <div className="space-y-6">
@@ -166,7 +182,7 @@ export default function CargosPage() {
                                         </TableRow>
                                     ) : (
                                         <TooltipProvider delayDuration={200}>
-                                            {cargos.map((cargo) => {
+                                            {cargosPaginados.map((cargo) => {
                                                 const permissoes = permissoesPorCargo[cargo.id] || [];
                                                 const grupos = agruparPermissoes(permissoes);
 
@@ -215,7 +231,7 @@ export default function CargosPage() {
                                                                 <Button
                                                                     variant="ghost"
                                                                     size="icon"
-                                                                    onClick={() => handleDelete(cargo.id)}
+                                                                    onClick={() => handleDeleteClick(cargo)}
                                                                     className="text-red-500 hover:text-red-600"
                                                                     disabled={deleting === cargo.id}
                                                                 >
@@ -236,8 +252,20 @@ export default function CargosPage() {
                             </Table>
                         </div>
                     )}
+                    <ListPagination currentPage={paginaAtual} totalItems={cargos.length} itemsPerPage={itensPorPagina} onPageChange={setPaginaAtual} itemLabel="cargos" />
                 </CardContent>
             </Card>
+
+            {itemToDelete && (
+                <SmartDeleteDialog
+                    open={deleteModalOpen}
+                    onOpenChange={setDeleteModalOpen}
+                    title={`Excluir Cargo: ${itemToDelete.nome}`}
+                    onConfirm={handleConfirmDelete}
+                    onCheckDependencies={() => cargosService.verificarDependencias(itemToDelete.id)}
+                />
+            )}
         </div>
     );
 }
+    const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : 'Erro ao excluir cargo. Tente novamente.';

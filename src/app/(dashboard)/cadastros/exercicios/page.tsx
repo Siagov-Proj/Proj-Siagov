@@ -21,6 +21,7 @@ import {
     CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ListPagination } from '@/components/ui/list-pagination';
 import {
     Plus,
     Search,
@@ -39,10 +40,12 @@ import { exerciciosService, IExercicioFinanceiroDB } from '@/services/api';
 const ANO_CORRENTE = new Date().getFullYear();
 
 export default function ExerciciosFinanceirosPage() {
+    const itensPorPagina = 10;
     const router = useRouter();
     const [exercicios, setExercicios] = useState<IExercicioFinanceiroDB[]>([]);
     const [termoBusca, setTermoBusca] = useState('');
     const [loading, setLoading] = useState(true);
+    const [paginaAtual, setPaginaAtual] = useState(1);
 
     const carregarExercicios = useCallback(async () => {
         try {
@@ -63,6 +66,10 @@ export default function ExerciciosFinanceirosPage() {
         return () => clearTimeout(debounce);
     }, [carregarExercicios]);
 
+    useEffect(() => {
+        setPaginaAtual(1);
+    }, [termoBusca]);
+
     // Verifica se o exercício pode ser editado (apenas ano corrente)
     const podeEditar = (ano: number): boolean => {
         return ano >= ANO_CORRENTE;
@@ -81,6 +88,8 @@ export default function ExerciciosFinanceirosPage() {
         }
         router.push(`/cadastros/exercicios/${exercicio.id}`);
     };
+
+    const exerciciosPaginados = exercicios.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
 
     return (
         <div className="space-y-6">
@@ -168,7 +177,7 @@ export default function ExerciciosFinanceirosPage() {
                                             </TableCell>
                                         </TableRow>
                                     ) : (
-                                        exercicios.map((exercicio) => (
+                                        exerciciosPaginados.map((exercicio) => (
                                             <TableRow key={exercicio.id}>
                                                 <TableCell className="font-bold text-lg">
                                                     {exercicio.ano}
@@ -225,6 +234,7 @@ export default function ExerciciosFinanceirosPage() {
                             </Table>
                         </div>
                     )}
+                    <ListPagination currentPage={paginaAtual} totalItems={exercicios.length} itemsPerPage={itensPorPagina} onPageChange={setPaginaAtual} itemLabel="exercícios" />
                 </CardContent>
             </Card>
         </div>

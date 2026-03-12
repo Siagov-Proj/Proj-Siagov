@@ -1,5 +1,6 @@
 
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { sanitizeSearchTerm } from "@/utils";
 import type { ICredor } from "@/types";
 
 // Database interface (snake_case)
@@ -186,8 +187,10 @@ export const credoresService = {
             .eq('excluido', false)
             .order('nome', { ascending: true });
 
-        if (termoBusca) {
-            query = query.or(`nome.ilike.%${termoBusca}%,identificador.ilike.%${termoBusca}%,nome_fantasia.ilike.%${termoBusca}%`);
+        const termoSanitizado = termoBusca ? sanitizeSearchTerm(termoBusca) : '';
+
+        if (termoSanitizado) {
+            query = query.or(`nome.ilike.%${termoSanitizado}%,identificador.ilike.%${termoSanitizado}%,nome_fantasia.ilike.%${termoSanitizado}%`);
         }
 
         const { data, error } = await query;

@@ -14,6 +14,7 @@ import {
     Undo,
     Redo,
 } from 'lucide-react';
+import { useCadastroDialogs } from '@/components/cadastros/cadastro-dialog-provider';
 import { cn } from '@/lib/utils';
 
 interface RichTextEditorProps {
@@ -29,6 +30,7 @@ export function RichTextEditor({
     placeholder = 'Digite aqui...',
     className,
 }: RichTextEditorProps) {
+    const { showPrompt } = useCadastroDialogs();
     const editor = useEditor({
         extensions: [
             StarterKit,
@@ -54,8 +56,16 @@ export function RichTextEditor({
         return null;
     }
 
-    const addLink = () => {
-        const url = window.prompt('URL do link:');
+    const addLink = async () => {
+        const url = await showPrompt({
+            title: 'Inserir link',
+            description: 'Informe a URL que deseja vincular ao texto selecionado.',
+            confirmLabel: 'Inserir',
+            cancelLabel: 'Cancelar',
+            variant: 'info',
+            placeholder: 'https://exemplo.com.br',
+        });
+
         if (url) {
             editor.chain().focus().setLink({ href: url }).run();
         }

@@ -4,6 +4,8 @@
  */
 
 import { getSupabaseClient } from "@/lib/supabase/client";
+import type { User } from "@supabase/supabase-js";
+import { sanitizeSearchTerm } from "@/utils";
 
 export interface IUsuarioDB {
     id: string;
@@ -41,8 +43,10 @@ export const usuariosService = {
             .eq('excluido', false)
             .order('nome', { ascending: true });
 
-        if (termoBusca) {
-            query = query.or(`nome.ilike.%${termoBusca}%,cpf.ilike.%${termoBusca}%,email_institucional.ilike.%${termoBusca}%`);
+        const termoSanitizado = termoBusca ? sanitizeSearchTerm(termoBusca) : '';
+
+        if (termoSanitizado) {
+            query = query.or(`nome.ilike.%${termoSanitizado}%,cpf.ilike.%${termoSanitizado}%,email_institucional.ilike.%${termoSanitizado}%`);
         }
 
         const { data, error } = await query;
@@ -160,5 +164,19 @@ export const usuariosService = {
         }
 
         return data as IUsuarioDB[];
+    },
+
+    /**
+     * Helper param verificar se um usuário autenticado é admin global com base JWT
+     */
+    isGlobalAdminUser(user: User | null | undefined): boolean {
+        if (!user) return false;
+        
+        const appMetadata = user.app_metadata || {};
+
+        return (
+            appMetadata.role === 'admin' ||
+            appMetadata.claims_admin === true
+        );
     }
 };

@@ -21,6 +21,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { ListPagination } from '@/components/ui/list-pagination';
 import {
     ArrowLeft,
     Plus,
@@ -32,6 +33,7 @@ import {
     Loader2,
 } from 'lucide-react';
 import { esferasService, IEsferaDB } from '@/services/api';
+import { useCadastroDialogs } from '@/components/cadastros/cadastro-dialog-provider';
 
 // Interface estendida para UI
 interface IEsferaUI extends IEsferaDB {
@@ -39,7 +41,10 @@ interface IEsferaUI extends IEsferaDB {
 }
 
 export default function EsferasPage() {
+    const itensPorPagina = 10;
     const router = useRouter();
+    const [paginaAtual, setPaginaAtual] = useState(1);
+    const { showConfirm } = useCadastroDialogs();
     const [esferas, setEsferas] = useState<IEsferaUI[]>([]);
     const [termoBusca, setTermoBusca] = useState('');
     const [loading, setLoading] = useState(true);
@@ -73,6 +78,10 @@ export default function EsferasPage() {
         carregarEsferas();
     }, [carregarEsferas]);
 
+    useEffect(() => {
+        setPaginaAtual(1);
+    }, [termoBusca]);
+
     const handleNovo = () => {
         router.push('/cadastros/esferas/novo');
     };
@@ -88,7 +97,12 @@ export default function EsferasPage() {
             return;
         }
 
-        if (!confirm('Tem certeza que deseja excluir esta esfera?')) {
+        if (!await showConfirm({
+            title: 'Excluir esfera',
+            description: 'Tem certeza que deseja excluir esta esfera?',
+            confirmLabel: 'Excluir',
+            variant: 'danger',
+        })) {
             return;
         }
 
@@ -101,6 +115,8 @@ export default function EsferasPage() {
             alert('Erro ao excluir esfera. Tente novamente.');
         }
     };
+
+    const esferasPaginadas = esferas.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
 
     const obterCorEsfera = (sigla: string) => {
         switch (sigla) {
@@ -227,7 +243,7 @@ export default function EsferasPage() {
                                             </TableCell>
                                         </TableRow>
                                     ) : (
-                                        esferas.map((esf) => (
+                                        esferasPaginadas.map((esf) => (
                                             <TableRow key={esf.id}>
                                                 <TableCell>
                                                     <Badge className={obterCorEsfera(esf.sigla)}>
@@ -275,6 +291,7 @@ export default function EsferasPage() {
                             </Table>
                         </div>
                     )}
+                    <ListPagination currentPage={paginaAtual} totalItems={esferas.length} itemsPerPage={itensPorPagina} onPageChange={setPaginaAtual} itemLabel="esferas" />
                 </CardContent>
             </Card>
         </div>

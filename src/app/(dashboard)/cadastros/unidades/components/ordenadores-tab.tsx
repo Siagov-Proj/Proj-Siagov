@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Loader2, Plus, Pencil, Trash2 } from 'lucide-react';
 import { ordenadoresService, IOrdenadorDB } from '@/services/api/ordenadoresService';
+import { useCadastroDialogs } from '@/components/cadastros/cadastro-dialog-provider';
 
 interface OrdenadoresTabProps {
     unidadeGestoraId: string;
@@ -33,6 +34,7 @@ const emptyOrdenador = {
 };
 
 export function OrdenadoresTab({ unidadeGestoraId }: OrdenadoresTabProps) {
+    const { showConfirm } = useCadastroDialogs();
     const [ordenadores, setOrdenadores] = useState<IOrdenadorDB[]>([]);
     const [loading, setLoading] = useState(true);
     const [modalOpen, setModalOpen] = useState(false);
@@ -143,7 +145,12 @@ export function OrdenadoresTab({ unidadeGestoraId }: OrdenadoresTabProps) {
     };
 
     const handleExcluir = async (id: string, nome: string) => {
-        if (!window.confirm(`Tem certeza que deseja excluir o ordenador ${nome}?`)) {
+        if (!await showConfirm({
+            title: 'Excluir ordenador',
+            description: `Tem certeza que deseja excluir o ordenador ${nome}?`,
+            confirmLabel: 'Excluir',
+            variant: 'danger',
+        })) {
             return;
         }
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/hooks/useAuth';
 import { Card, CardContent } from '@/components/ui/card';
@@ -24,9 +25,13 @@ export default function SelecionarInstituicaoPage() {
         await logoutAction();
     };
 
-    // Se não há lotações ou user, redirecionar
+    useEffect(() => {
+        if (!user || lotacoes.length === 0) {
+            router.replace('/login');
+        }
+    }, [lotacoes.length, router, user]);
+
     if (!user || lotacoes.length === 0) {
-        router.push('/login');
         return null;
     }
 

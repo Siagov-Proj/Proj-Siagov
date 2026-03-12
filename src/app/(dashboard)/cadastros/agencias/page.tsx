@@ -14,15 +14,20 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ListPagination } from '@/components/ui/list-pagination';
 import { Plus, Search, Pencil, Trash2, Landmark, ArrowLeft, Loader2 } from 'lucide-react';
 import { agenciasService, IAgenciaDB } from '@/services/api';
+import { useCadastroDialogs } from '@/components/cadastros/cadastro-dialog-provider';
 
 export default function AgenciasPage() {
+    const itensPorPagina = 10;
     const router = useRouter();
+    const { showConfirm } = useCadastroDialogs();
     const [agencias, setAgencias] = useState<IAgenciaDB[]>([]);
     const [termoBusca, setTermoBusca] = useState('');
     const [loading, setLoading] = useState(true);
     const [deleting, setDeleting] = useState<string | null>(null);
+    const [paginaAtual, setPaginaAtual] = useState(1);
 
     const carregarAgencias = useCallback(async () => {
         try {
@@ -43,6 +48,12 @@ export default function AgenciasPage() {
         return () => clearTimeout(debounce);
     }, [carregarAgencias]);
 
+    useEffect(() => {
+        setPaginaAtual(1);
+    }, [termoBusca]);
+
+    const agenciasPaginadas = agencias.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
+
     const handleNovo = () => {
         router.push('/cadastros/agencias/novo');
     };
@@ -52,17 +63,24 @@ export default function AgenciasPage() {
     };
 
     const handleDelete = async (id: string) => {
-        if (confirm('Tem certeza que deseja excluir esta agência?')) {
-            try {
-                setDeleting(id);
-                await agenciasService.excluir(id);
-                setAgencias(agencias.filter((a) => a.id !== id));
-            } catch (err) {
-                console.error('Erro ao excluir agência:', err);
-                alert('Erro ao excluir agência. Tente novamente.');
-            } finally {
-                setDeleting(null);
-            }
+        if (!await showConfirm({
+            title: 'Excluir agência',
+            description: 'Tem certeza que deseja excluir esta agência?',
+            confirmLabel: 'Excluir',
+            variant: 'danger',
+        })) {
+            return;
+        }
+
+        try {
+            setDeleting(id);
+            await agenciasService.excluir(id);
+            setAgencias(agencias.filter((a) => a.id !== id));
+        } catch (err) {
+            console.error('Erro ao excluir agência:', err);
+            alert('Erro ao excluir agência. Tente novamente.');
+        } finally {
+            setDeleting(null);
         }
     };
 
@@ -139,7 +157,7 @@ export default function AgenciasPage() {
                                             </TableCell>
                                         </TableRow>
                                     ) : (
-                                        agencias.map((agencia) => (
+                                        agenciasPaginadas.map((agencia) => (
                                             <TableRow key={agencia.id}>
                                                 <TableCell className="font-mono">
                                                     {agencia.codigo}{agencia.digito_verificador ? `-${agencia.digito_verificador}` : ''}
@@ -179,6 +197,7 @@ export default function AgenciasPage() {
                             </Table>
                         </div>
                     )}
+                    <ListPagination currentPage={paginaAtual} totalItems={agencias.length} itemsPerPage={itensPorPagina} onPageChange={setPaginaAtual} itemLabel="agências" />
                 </CardContent>
             </Card>
         </div>

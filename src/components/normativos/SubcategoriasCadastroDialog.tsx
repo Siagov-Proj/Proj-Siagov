@@ -14,6 +14,8 @@ import {
 } from '@/components/ui/dialog';
 import { Plus, Edit2, Trash2, Loader2, ListTree } from 'lucide-react';
 import { categoriasDocService, ISubcategoriaDocumentoDB } from '@/services/api/categoriasDocService';
+import { useCadastroDialogs } from '@/components/cadastros/cadastro-dialog-provider';
+import { buildNormativoLabel, compareNormativoLabels, extractNormativoCode, stripNormativoCode } from '@/utils';
 
 interface SubcategoriasCadastroDialogProps {
     categoriaId: string;
@@ -21,6 +23,7 @@ interface SubcategoriasCadastroDialogProps {
 }
 
 export function SubcategoriasCadastroDialog({ categoriaId, onSubcategoriasChanged }: SubcategoriasCadastroDialogProps) {
+    const { showConfirm } = useCadastroDialogs();
     const [open, setOpen] = useState(false);
     const [subcategorias, setSubcategorias] = useState<ISubcategoriaDocumentoDB[]>([]);
     const [loading, setLoading] = useState(false);
@@ -33,13 +36,18 @@ export function SubcategoriasCadastroDialog({ categoriaId, onSubcategoriasChange
     const [formDescricao, setFormDescricao] = useState('');
     const [erroNome, setErroNome] = useState('');
     const [mostrarForm, setMostrarForm] = useState(false);
+    const [codigoCategoria, setCodigoCategoria] = useState('');
 
     const carregarSubcategorias = useCallback(async () => {
         if (!categoriaId) return;
         try {
             setLoading(true);
-            const dados = await categoriasDocService.listarSubcategorias(categoriaId);
-            setSubcategorias(dados);
+            const [dados, categoria] = await Promise.all([
+                categoriasDocService.listarSubcategorias(categoriaId),
+                categoriasDocService.buscarCategoriaPorId(categoriaId),
+            ]);
+            setSubcategorias(dados.sort((a, b) => compareNormativoLabels(a.nome, b.nome)));
+            setCodigoCategoria(extractNormativoCode(categoria?.nome || '') || '');
         } catch (err) {
             console.error('Erro ao carregar subcategorias:', err);
         } finally {
@@ -64,7 +72,7 @@ export function SubcategoriasCadastroDialog({ categoriaId, onSubcategoriasChange
 
     const iniciarEdicao = (subcat: ISubcategoriaDocumentoDB) => {
         setEditandoId(subcat.id);
-        setFormNome(subcat.nome);
+        setFormNome(stripNormativoCode(subcat.nome));
         setFormDescricao(subcat.descricao || '');
         setErroNome('');
         setMostrarForm(true);
@@ -84,14 +92,17 @@ export function SubcategoriasCadastroDialog({ categoriaId, onSubcategoriasChange
         try {
             setSaving(true);
             if (editandoId) {
+                const subcategoriaAtual = subcategorias.find((item) => item.id === editandoId);
+                const codigoAtual = extractNormativoCode(subcategoriaAtual?.nome || '');
                 await categoriasDocService.atualizarSubcategoria(editandoId, {
-                    nome: formNome.trim(),
+                    nome: codigoAtual ? buildNormativoLabel(codigoAtual, formNome.trim()) : formNome.trim(),
                     descricao: formDescricao.trim() || undefined,
                 });
             } else {
+                const proximoCodigo = codigoCategoria ? `${codigoCategoria}.${subcategorias.length + 1}` : '';
                 await categoriasDocService.criarSubcategoria({
                     categoria_id: categoriaId,
-                    nome: formNome.trim(),
+                    nome: proximoCodigo ? buildNormativoLabel(proximoCodigo, formNome.trim()) : formNome.trim(),
                     descricao: formDescricao.trim() || undefined,
                     ativo: true,
                 });
@@ -108,7 +119,12 @@ export function SubcategoriasCadastroDialog({ categoriaId, onSubcategoriasChange
     };
 
     const handleExcluir = async (id: string) => {
-        if (!confirm('Tem certeza que deseja excluir esta subcategoria?')) return;
+        if (!await showConfirm({
+            title: 'Excluir subcategoria',
+            description: 'Tem certeza que deseja excluir esta subcategoria?',
+            confirmLabel: 'Excluir',
+            variant: 'danger',
+        })) return;
 
         try {
             setDeleting(id);
@@ -155,14 +171,19 @@ export function SubcategoriasCadastroDialog({ categoriaId, onSubcategoriasChange
                                 </Label>
                                 <Input
                                     id="subcat-nome"
-                                    placeholder="Ex: Pareceres Finais"
+                                    placeholder={codigoCategoria ? `Ex: ${codigoCategoria}.1. Dispensa - Em Razao do Valor` : 'Ex: Dispensa - Em Razao do Valor'}
                                     value={formNome}
                                     onChange={(e) => {
-                                        setFormNome(e.target.value);
+                                        setFormNome(stripNormativoCode(e.target.value));
                                         if (e.target.value.trim()) setErroNome('');
                                     }}
                                     className={erroNome ? 'border-red-500' : ''}
                                 />
+                                <p className="text-xs text-muted-foreground">
+                                    {editandoId
+                                        ? `Codigo preservado: ${extractNormativoCode(subcategorias.find((item) => item.id === editandoId)?.nome || '') || 'sem codigo'}`
+                                        : `Proximo codigo: ${codigoCategoria ? `${codigoCategoria}.${subcategorias.length + 1}` : 'defina o codigo da categoria'}`}
+                                </p>
                                 {erroNome && <p className="text-xs text-red-500">{erroNome}</p>}
                             </div>
 

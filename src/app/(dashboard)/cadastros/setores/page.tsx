@@ -14,15 +14,21 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ListPagination } from '@/components/ui/list-pagination';
 import { Plus, Search, Pencil, Trash2, BriefcaseBusiness, ArrowLeft, Loader2 } from 'lucide-react';
 import { setoresService, ISetorDB } from '@/services/api';
+import { SmartDeleteDialog } from '@/components/SmartDeleteDialog';
 
 export default function SetoresPage() {
+    const itensPorPagina = 10;
     const router = useRouter();
     const [setores, setSetores] = useState<ISetorDB[]>([]);
     const [termoBusca, setTermoBusca] = useState('');
     const [loading, setLoading] = useState(true);
     const [deleting, setDeleting] = useState<string | null>(null);
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [itemToDelete, setItemToDelete] = useState<{ id: string; nome: string } | null>(null);
+    const [paginaAtual, setPaginaAtual] = useState(1);
 
     const carregarSetores = useCallback(async () => {
         try {
@@ -43,6 +49,10 @@ export default function SetoresPage() {
         return () => clearTimeout(debounce);
     }, [carregarSetores]);
 
+    useEffect(() => {
+        setPaginaAtual(1);
+    }, [termoBusca]);
+
     const handleNovo = () => {
         router.push('/cadastros/setores/novo');
     };
@@ -51,20 +61,26 @@ export default function SetoresPage() {
         router.push(`/cadastros/setores/${id}`);
     };
 
-    const handleDelete = async (id: string) => {
-        if (confirm('Tem certeza que deseja excluir este setor?')) {
-            try {
-                setDeleting(id);
-                await setoresService.excluir(id);
-                setSetores(setores.filter((s) => s.id !== id));
-            } catch (err) {
-                console.error('Erro ao excluir setor:', err);
-                alert('Erro ao excluir setor. Tente novamente.');
-            } finally {
-                setDeleting(null);
-            }
+    const handleDeleteClick = (setor: ISetorDB) => {
+        setItemToDelete({ id: setor.id, nome: setor.nome });
+        setDeleteModalOpen(true);
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!itemToDelete) return;
+        try {
+            setDeleting(itemToDelete.id);
+            await setoresService.excluir(itemToDelete.id);
+            setSetores(setores.filter((s) => s.id !== itemToDelete.id));
+        } catch (err: unknown) {
+            console.error('Erro ao excluir setor:', err);
+            alert(getErrorMessage(err));
+        } finally {
+            setDeleting(null);
         }
     };
+
+    const setoresPaginados = setores.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
 
     return (
         <div className="space-y-6">
@@ -138,7 +154,7 @@ export default function SetoresPage() {
                                             </TableCell>
                                         </TableRow>
                                     ) : (
-                                        setores.map((setor) => (
+                                        setoresPaginados.map((setor) => (
                                             <TableRow key={setor.id}>
                                                 <TableCell className="font-mono">{setor.codigo}</TableCell>
                                                 <TableCell className="font-medium">{setor.nome}</TableCell>
@@ -152,7 +168,7 @@ export default function SetoresPage() {
                                                         <Button
                                                             variant="ghost"
                                                             size="icon"
-                                                            onClick={() => handleDelete(setor.id)}
+                                                            onClick={() => handleDeleteClick(setor)}
                                                             className="text-red-500 hover:text-red-600"
                                                             disabled={deleting === setor.id}
                                                         >
@@ -171,8 +187,20 @@ export default function SetoresPage() {
                             </Table>
                         </div>
                     )}
+                    <ListPagination currentPage={paginaAtual} totalItems={setores.length} itemsPerPage={itensPorPagina} onPageChange={setPaginaAtual} itemLabel="setores" />
                 </CardContent>
             </Card>
+
+            {itemToDelete && (
+                <SmartDeleteDialog
+                    open={deleteModalOpen}
+                    onOpenChange={setDeleteModalOpen}
+                    title={`Excluir Setor: ${itemToDelete.nome}`}
+                    onConfirm={handleConfirmDelete}
+                    onCheckDependencies={() => setoresService.verificarDependencias(itemToDelete.id)}
+                />
+            )}
         </div>
     );
 }
+    const getErrorMessage = (error: unknown) => error instanceof Error ? error.message : 'Erro ao excluir setor. Tente novamente.';

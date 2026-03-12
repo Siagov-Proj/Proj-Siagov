@@ -41,6 +41,8 @@ import {
     Loader2,
 } from 'lucide-react';
 import { categoriasDocService, leisNormativasService, ICategoriaDocumentoDB, ISubcategoriaDocumentoDB, ILeiNormativaDB } from '@/services/api';
+import { useCadastroDialogs } from '@/components/cadastros/cadastro-dialog-provider';
+import { ListPagination } from '@/components/ui/list-pagination';
 
 // Tipo estendido para incluir subcategorias
 interface ICategoriaComSubcategorias extends ICategoriaDocumentoDB {
@@ -48,7 +50,9 @@ interface ICategoriaComSubcategorias extends ICategoriaDocumentoDB {
 }
 
 export default function CategoriasDocumentosPage() {
+    const itensPorPagina = 10;
     const router = useRouter();
+    const { showConfirm } = useCadastroDialogs();
     const [categorias, setCategorias] = useState<ICategoriaComSubcategorias[]>([]);
     const [leis, setLeis] = useState<ILeiNormativaDB[]>([]);
     const [loading, setLoading] = useState(true);
@@ -56,6 +60,7 @@ export default function CategoriasDocumentosPage() {
     const [filtroLei, setFiltroLei] = useState('todas');
     const [expandidas, setExpandidas] = useState<string[]>([]);
     const [deleting, setDeleting] = useState<string | null>(null);
+    const [paginaAtual, setPaginaAtual] = useState(1);
 
     const carregarCategorias = useCallback(async () => {
         try {
@@ -96,6 +101,10 @@ export default function CategoriasDocumentosPage() {
         return () => clearTimeout(debounce);
     }, [carregarCategorias]);
 
+    useEffect(() => {
+        setPaginaAtual(1);
+    }, [termoBusca, filtroLei]);
+
     const toggleExpansao = (id: string) => {
         setExpandidas((prev) =>
             prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
@@ -119,7 +128,12 @@ export default function CategoriasDocumentosPage() {
     };
 
     const excluirCategoria = async (id: string) => {
-        if (!confirm('Tem certeza que deseja excluir esta categoria?')) return;
+        if (!await showConfirm({
+            title: 'Excluir categoria',
+            description: 'Tem certeza que deseja excluir esta categoria?',
+            confirmLabel: 'Excluir',
+            variant: 'danger',
+        })) return;
 
         try {
             setDeleting(id);
@@ -140,7 +154,12 @@ export default function CategoriasDocumentosPage() {
     };
 
     const excluirSubcategoria = async (categoriaId: string, subcategoriaId: string) => {
-        if (!confirm('Tem certeza que deseja excluir esta subcategoria?')) return;
+        if (!await showConfirm({
+            title: 'Excluir subcategoria',
+            description: 'Tem certeza que deseja excluir esta subcategoria?',
+            confirmLabel: 'Excluir',
+            variant: 'danger',
+        })) return;
 
         try {
             await categoriasDocService.excluirSubcategoria(subcategoriaId);
@@ -159,6 +178,8 @@ export default function CategoriasDocumentosPage() {
             alert('Erro ao excluir subcategoria. Tente novamente.');
         }
     };
+
+    const categoriasPaginadas = categorias.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
 
     return (
         <div className="space-y-6">
@@ -236,7 +257,7 @@ export default function CategoriasDocumentosPage() {
                                     Nenhuma categoria encontrada
                                 </div>
                             ) : (
-                                categorias.map((cat) => (
+                                categoriasPaginadas.map((cat) => (
                                     <div key={cat.id} className="border rounded-lg">
                                         {/* Cabeçalho da Categoria */}
                                         <div
@@ -367,6 +388,7 @@ export default function CategoriasDocumentosPage() {
                             )}
                         </div>
                     )}
+                    <ListPagination currentPage={paginaAtual} totalItems={categorias.length} itemsPerPage={itensPorPagina} onPageChange={setPaginaAtual} itemLabel="categorias" />
                 </CardContent>
             </Card>
         </div>
