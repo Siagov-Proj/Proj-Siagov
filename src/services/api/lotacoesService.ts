@@ -30,6 +30,21 @@ export interface ILotacaoComInstituicao extends ILotacaoDB {
     };
 }
 
+interface ILotacaoInstituicaoRow {
+    id: string;
+    orgao_id?: string;
+    unidade_gestora_id?: string;
+    setor_id?: string;
+    cargo_id?: string;
+    perfil_acesso: string;
+    instituicoes: {
+        id: string;
+        codigo: string;
+        nome: string;
+        nome_abreviado: string;
+    };
+}
+
 const TABLE_NAME = 'usuario_lotacoes';
 
 export const lotacoesService = {
@@ -105,7 +120,7 @@ export const lotacoesService = {
             throw error;
         }
 
-        return (data || []).map((item: any) => ({
+        return ((data || []) as ILotacaoInstituicaoRow[]).map((item) => ({
             lotacaoId: item.id,
             instituicao: item.instituicoes,
             orgao_id: item.orgao_id,

@@ -34,6 +34,8 @@ export interface IChamadoMensagemDB {
     id: string;
     chamado_id: string;
     mensagem: string;
+    autor?: string;
+    tipo?: string;
     created_at: string;
     updated_at?: string;
 }

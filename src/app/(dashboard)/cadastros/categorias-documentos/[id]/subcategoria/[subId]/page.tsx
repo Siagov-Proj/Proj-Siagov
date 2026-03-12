@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,24 +39,14 @@ export default function EditarSubcategoriaPage() {
     const params = useParams();
     const categoriaId = params.id as string;
     const subcategoriaId = params.subId as string;
-    const [formData, setFormData] = useState(formVazio);
-    const [originalData, setOriginalData] = useState(formVazio);
-    const [erros, setErros] = useState<Record<string, string>>({});
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
+    const dataInicial = (() => {
         const found = subcategoriasMock.find((s) => s.id === subcategoriaId && s.categoriaId === categoriaId);
-
-        if (found) {
-            const data = {
-                nome: found.nome,
-                descricao: found.descricao,
-            };
-            setFormData(data);
-            setOriginalData(data);
-        }
-        setLoading(false);
-    }, [categoriaId, subcategoriaId]);
+        return found ? { nome: found.nome, descricao: found.descricao } : formVazio;
+    })();
+    const [formData, setFormData] = useState(dataInicial);
+    const [originalData, setOriginalData] = useState(dataInicial);
+    const [erros, setErros] = useState<Record<string, string>>({});
+    const [loading] = useState(false);
 
     const validar = (): boolean => {
         const novosErros: Record<string, string> = {};

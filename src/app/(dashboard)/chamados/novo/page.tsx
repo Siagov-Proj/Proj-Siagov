@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeft, Send, MessageSquare } from 'lucide-react';
+import type { IChamadoDB } from '@/services/api/chamadosService';
 
 const CATEGORIAS = [
     { value: 'Bug', label: 'Bug/Erro' },
@@ -29,6 +30,9 @@ const PRIORIDADES = [
     { value: 'Média', label: 'Média' },
     { value: 'Baixa', label: 'Baixa' },
 ];
+
+type IChamadoCategoria = IChamadoDB['categoria'];
+type IChamadoPrioridade = IChamadoDB['prioridade'];
 
 const formDataVazio = {
     assunto: '',
@@ -63,8 +67,8 @@ export default function NovoChamadoPage() {
         try {
             await chamadosService.criar({
                 assunto: formData.assunto,
-                categoria: formData.categoria as any, // Cast to enum
-                prioridade: formData.prioridade as any,
+                categoria: formData.categoria as IChamadoCategoria,
+                prioridade: formData.prioridade as IChamadoPrioridade,
                 descricao: formData.descricao,
                 status: 'Aberto',
                 criado_por: 'Administrador Sistema' // Hardcoded for now, ideal: fetching from Auth

@@ -31,6 +31,8 @@ export interface IOrdenadorDB {
     updated_at: string;
 }
 
+type IOrdenadorUpdatePayload = Partial<Omit<IOrdenadorDB, 'id' | 'created_at' | 'updated_at'>>;
+
 const TABLE_NAME = 'ordenadores';
 
 export const ordenadoresService = {
@@ -91,11 +93,11 @@ export const ordenadoresService = {
     async atualizar(id: string, ordenador: Partial<IOrdenadorDB>): Promise<IOrdenadorDB> {
         const supabase = getSupabaseClient();
         // Remove campos que não devem ser atualizados diretamente
-        const { id: _, created_at, updated_at, ...dadosAtualizacao } = ordenador as any;
+        const { id: _ignoredId, created_at: _ignoredCreatedAt, updated_at: _ignoredUpdatedAt, ...dadosAtualizacao } = ordenador;
 
         const { data, error } = await supabase
             .from(TABLE_NAME)
-            .update(dadosAtualizacao)
+            .update(dadosAtualizacao as IOrdenadorUpdatePayload)
             .eq('id', id)
             .select()
             .single();

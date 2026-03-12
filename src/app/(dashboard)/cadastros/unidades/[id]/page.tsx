@@ -210,8 +210,8 @@ export default function EditarUnidadePage() {
                 tipo_unidade_gestora: formData.tipoUnidadeGestora,
             });
             router.push('/cadastros/unidades');
-        } catch (err: any) {
-            const errorMsg = err?.message || err?.details || JSON.stringify(err);
+        } catch (err: unknown) {
+            const errorMsg = err instanceof Error ? err.message : JSON.stringify(err);
             console.error('Erro ao atualizar unidade gestora:', errorMsg, err);
             alert(`Erro ao atualizar unidade gestora: ${errorMsg}`);
         } finally {

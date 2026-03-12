@@ -92,7 +92,7 @@ export default function EditarCargoPage() {
 
             if (cargo) {
                 // Carregar dependências em cascata
-                const promises: Promise<any>[] = [];
+                const promises: Promise<void>[] = [];
 
                 if (cargo.instituicao_id) {
                     promises.push(orgaosService.listarPorInstituicao(cargo.instituicao_id).then(setOrgaos));

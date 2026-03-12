@@ -4,6 +4,21 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 
+interface ILotacaoAuthRow {
+    id: string;
+    orgao_id?: string;
+    unidade_gestora_id?: string;
+    setor_id?: string;
+    cargo_id?: string;
+    perfil_acesso: string;
+    instituicoes?: {
+        id?: string;
+        codigo?: string;
+        nome?: string;
+        nome_abreviado?: string;
+    } | null;
+}
+
 export async function loginWithCpf(formData: FormData) {
     const rawCpf = formData.get('cpf') as string;
     const password = formData.get('password') as string;
@@ -57,7 +72,7 @@ export async function loginWithCpf(formData: FormData) {
     }
 
     // 3. Buscar lotações do usuário
-    const { data: lotacoesData, error: lotacoesError } = await supabase
+    const { data: lotacoesData } = await supabase
         .from('usuario_lotacoes')
         .select(`
             id,
@@ -77,7 +92,7 @@ export async function loginWithCpf(formData: FormData) {
         .eq('excluido', false)
         .eq('ativo', true);
 
-    const lotacoes = (lotacoesData || []).map((item: any) => ({
+    const lotacoes = ((lotacoesData || []) as ILotacaoAuthRow[]).map((item) => ({
         lotacaoId: item.id,
         instituicaoId: item.instituicoes?.id,
         instituicaoNome: item.instituicoes?.nome,

@@ -57,7 +57,7 @@ export const validateCnpj = (cnpj: string): boolean => {
         sum += parseInt(cleaned.charAt(i)) * weight;
         weight = weight === 2 ? 9 : weight - 1;
     }
-    let digit1 = sum % 11 < 2 ? 0 : 11 - (sum % 11);
+    const digit1 = sum % 11 < 2 ? 0 : 11 - (sum % 11);
 
     sum = 0;
     weight = 6;
@@ -65,7 +65,7 @@ export const validateCnpj = (cnpj: string): boolean => {
         sum += parseInt(cleaned.charAt(i)) * weight;
         weight = weight === 2 ? 9 : weight - 1;
     }
-    let digit2 = sum % 11 < 2 ? 0 : 11 - (sum % 11);
+    const digit2 = sum % 11 < 2 ? 0 : 11 - (sum % 11);
 
     return cleaned.charAt(12) === digit1.toString() && cleaned.charAt(13) === digit2.toString();
 };
@@ -156,4 +156,6 @@ export const validators = {
 export const formatDateBR = formatDate;
 export const formatDateTimeBR = formatDateTime;
 
-export default { formatters, validators };
+const formatterUtils = { formatters, validators };
+
+export default formatterUtils;

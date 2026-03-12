@@ -20,6 +20,15 @@ export interface ICargoPermissaoDB {
     created_at: string;
 }
 
+interface ICargoPermissaoLookup {
+    permissao_id: string;
+}
+
+interface ICargoPermissaoJoinRow {
+    cargo_id: string;
+    permissoes: IPermissaoDB | null;
+}
+
 export const permissoesService = {
     /**
      * Lista todas as permissões disponíveis ordenadas por módulo
@@ -55,7 +64,7 @@ export const permissoesService = {
             throw error;
         }
 
-        return (data || []).map((item: any) => item.permissao_id);
+        return ((data || []) as ICargoPermissaoLookup[]).map((item) => item.permissao_id);
     },
 
     /**
@@ -112,7 +121,7 @@ export const permissoesService = {
         }
 
         const result: Record<string, IPermissaoDB[]> = {};
-        (data || []).forEach((row: any) => {
+        ((data || []) as ICargoPermissaoJoinRow[]).forEach((row) => {
             const cargoId = row.cargo_id;
             if (!result[cargoId]) result[cargoId] = [];
             if (row.permissoes) {

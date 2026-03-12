@@ -11,13 +11,15 @@ import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Send, MessageSquare, Clock, User, AlertCircle } from 'lucide-react';
 import { formatDateTimeBR } from '@/utils/formatters';
 
+type IChamadoMensagem = Awaited<ReturnType<typeof chamadosService.listarMensagens>>[number];
+
 // (Mock data removed)
 
 export default function DetalheChamadoPage() {
     const params = useParams();
     const id = params.id as string;
     const [chamado, setChamado] = useState<IChamadoDB | null>(null);
-    const [mensagens, setMensagens] = useState<any[]>([]);
+    const [mensagens, setMensagens] = useState<IChamadoMensagem[]>([]);
     const [loading, setLoading] = useState(true);
     const [novaMensagem, setNovaMensagem] = useState('');
     const [enviando, setEnviando] = useState(false);

@@ -139,6 +139,8 @@ const credorSchema = z.object({
 
 type CredorFormValues = z.infer<typeof credorSchema>;
 
+type ITipoCredor = CredorFormValues['tipoCredor'];
+
 export default function NovoCredorPage() {
     const router = useRouter();
     const [abaAtiva, setAbaAtiva] = useState('identificacao');
@@ -162,7 +164,7 @@ export default function NovoCredorPage() {
     const form = useForm<CredorFormValues>({
         resolver: zodResolver(credorSchema),
         defaultValues: {
-            tipoCredor: undefined as any,
+            tipoCredor: undefined as ITipoCredor | undefined,
             cadastroRfb: '',
             identificador: '',
             nome: '',
