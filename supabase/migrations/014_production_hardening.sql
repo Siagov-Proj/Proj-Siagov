@@ -38,7 +38,9 @@ BEGIN
         'usuario_lotacoes',
         'usuarios'
     ] LOOP
-        EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', table_name);
+        IF to_regclass(format('public.%I', table_name)) IS NOT NULL THEN
+            EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', table_name);
+        END IF;
     END LOOP;
 END $$;
 
@@ -95,22 +97,24 @@ BEGIN
         'usuario_lotacoes',
         'usuarios'
     ] LOOP
-        EXECUTE format(
-            'CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING ((SELECT auth.role()) = ''authenticated'')',
-            table_name || '_select_policy', table_name
-        );
-        EXECUTE format(
-            'CREATE POLICY %I ON public.%I FOR INSERT TO authenticated WITH CHECK ((SELECT auth.role()) = ''authenticated'')',
-            table_name || '_insert_policy', table_name
-        );
-        EXECUTE format(
-            'CREATE POLICY %I ON public.%I FOR UPDATE TO authenticated USING ((SELECT auth.role()) = ''authenticated'') WITH CHECK ((SELECT auth.role()) = ''authenticated'')',
-            table_name || '_update_policy', table_name
-        );
-        EXECUTE format(
-            'CREATE POLICY %I ON public.%I FOR DELETE TO authenticated USING ((SELECT auth.role()) = ''authenticated'')',
-            table_name || '_delete_policy', table_name
-        );
+        IF to_regclass(format('public.%I', table_name)) IS NOT NULL THEN
+            EXECUTE format(
+                'CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING ((SELECT auth.role()) = ''authenticated'')',
+                table_name || '_select_policy', table_name
+            );
+            EXECUTE format(
+                'CREATE POLICY %I ON public.%I FOR INSERT TO authenticated WITH CHECK ((SELECT auth.role()) = ''authenticated'')',
+                table_name || '_insert_policy', table_name
+            );
+            EXECUTE format(
+                'CREATE POLICY %I ON public.%I FOR UPDATE TO authenticated USING ((SELECT auth.role()) = ''authenticated'') WITH CHECK ((SELECT auth.role()) = ''authenticated'')',
+                table_name || '_update_policy', table_name
+            );
+            EXECUTE format(
+                'CREATE POLICY %I ON public.%I FOR DELETE TO authenticated USING ((SELECT auth.role()) = ''authenticated'')',
+                table_name || '_delete_policy', table_name
+            );
+        END IF;
     END LOOP;
 END $$;
 
@@ -178,7 +182,12 @@ CREATE INDEX IF NOT EXISTS idx_cargos_unidade_gestora_id ON public.cargos (unida
 CREATE INDEX IF NOT EXISTS idx_credores_agencia_id ON public.credores (agencia_id);
 CREATE INDEX IF NOT EXISTS idx_credores_banco_id ON public.credores (banco_id);
 CREATE INDEX IF NOT EXISTS idx_documentos_processo_id ON public.documentos (processo_id);
-CREATE INDEX IF NOT EXISTS idx_ordenadores_unidade_gestora_id ON public.ordenadores (unidade_gestora_id);
+DO $$
+BEGIN
+    IF to_regclass('public.ordenadores') IS NOT NULL THEN
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_ordenadores_unidade_gestora_id ON public.ordenadores (unidade_gestora_id)';
+    END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_setores_instituicao_id ON public.setores (instituicao_id);
 CREATE INDEX IF NOT EXISTS idx_setores_orgao_id ON public.setores (orgao_id);
 CREATE INDEX IF NOT EXISTS idx_setores_unidade_gestora_id ON public.setores (unidade_gestora_id);
