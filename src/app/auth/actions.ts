@@ -1,4 +1,3 @@
-
 'use server'
 
 import { createClient } from '@/lib/supabase/server';
@@ -94,9 +93,9 @@ export async function loginWithCpf(formData: FormData) {
 
     const lotacoes = ((lotacoesData || []) as ILotacaoAuthRow[]).map((item) => ({
         lotacaoId: item.id,
-        instituicaoId: item.instituicoes?.id,
-        instituicaoNome: item.instituicoes?.nome,
-        instituicaoCodigo: item.instituicoes?.codigo,
+        instituicaoId: item.instituicoes?.id || '',
+        instituicaoNome: item.instituicoes?.nome || '',
+        instituicaoCodigo: item.instituicoes?.codigo || '',
         orgaoId: item.orgao_id,
         unidadeGestoraId: item.unidade_gestora_id,
         setorId: item.setor_id,

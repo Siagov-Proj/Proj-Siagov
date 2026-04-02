@@ -5,17 +5,15 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { useThemeStore } from '@/hooks/useTheme';
 import { useAuthStore } from '@/hooks/useAuth';
-import { Moon, Sun, Eye, EyeOff, Loader2, Lock, CreditCard } from 'lucide-react';
+import { Eye, EyeOff, Loader2, Lock, CreditCard } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { maskCpf } from '@/utils/masks';
 import { loginWithCpf } from '@/app/auth/actions';
 
 export default function LoginPage() {
     const router = useRouter();
-    const { isDark, toggleTheme } = useThemeStore();
     const { login: syncStore } = useAuthStore();
 
     const [cpf, setCpf] = useState('');
@@ -38,22 +36,17 @@ export default function LoginPage() {
             const result = await loginWithCpf(formData);
 
             if (result?.success && result.user) {
-                // Sincroniza o estado do Zustand com os dados retornados
                 syncStore(result.user, 'authenticated');
 
-                // Verificar quantidade de lotações
                 const lotacoes = result.user.lotacoes || [];
 
                 if (lotacoes.length === 1) {
-                    // Apenas 1 lotação: seleciona automaticamente e vai ao dashboard
                     const { setLotacaoAtiva } = useAuthStore.getState();
                     setLotacaoAtiva(lotacoes[0]);
                     router.push('/dashboard');
                 } else if (lotacoes.length > 1) {
-                    // Múltiplas lotações: redireciona para seleção
                     router.push('/selecionar-instituicao');
                 } else {
-                    // Nenhuma lotação: vai ao dashboard (legacy)
                     router.push('/dashboard');
                 }
                 return;
@@ -71,59 +64,75 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900 p-4 font-sans">
-            <Button
-                variant="ghost"
-                size="icon"
-                onClick={toggleTheme}
-                className="absolute top-4 right-4"
-            >
-                {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-            </Button>
+        <div
+            className="min-h-screen flex items-center justify-center font-sans relative overflow-hidden"
+            style={{
+                backgroundImage: "url('/Tela_de_fundo_Login_SINGRA.png')",
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
+            }}
+        >
+            {/* Inner container - two columns */}
+            <div className="w-full max-w-5xl mx-auto flex items-center justify-between px-8 md:px-16 gap-8 py-12">
 
-            <div className="text-center mb-8 space-y-2">
-                <h1 className="text-3xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
-                    Bem-vindo ao SIAGOV
-                </h1>
-                <p className="text-muted-foreground text-lg">
-                    Sistema Integrado de Administração Governamental
-                </p>
-            </div>
+                {/* Left Side - SINGRA Logo */}
+                <div className="hidden md:flex flex-col items-center justify-center flex-1">
+                    <Image
+                        src="/LogoMarca_SINGRA_Vertical_Com_Nomenclatura.png"
+                        alt="SINGRA - Sistema Integrado de Gestão Administrativa"
+                        width={360}
+                        height={300}
+                        priority
+                        className="object-contain drop-shadow-sm"
+                    />
+                </div>
 
-            <Card className="w-full max-w-[400px] shadow-xl border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
-                <CardHeader className="space-y-1 pb-6">
-                    <CardTitle className="text-xl font-semibold text-left">Acesse sua conta</CardTitle>
-                </CardHeader>
+                {/* Right Side - Login Card */}
+                <div className="w-full md:w-auto md:min-w-[380px] md:max-w-[420px]">
+                    <div className="bg-white rounded-2xl shadow-2xl p-8 flex flex-col gap-6">
 
-                <form onSubmit={handleSubmit}>
-                    <CardContent className="space-y-4">
-                        {error && (
-                            <div className="p-3 text-sm text-red-500 bg-red-50 dark:bg-red-950/30 rounded-md border border-red-100 dark:border-red-900">
-                                {error}
+                        {/* Card Header */}
+                        <h1 className="text-xl font-semibold text-gray-800">
+                            Acesso ao sistema
+                        </h1>
+
+                        {/* Form */}
+                        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+
+                            {/* Error message */}
+                            {error && (
+                                <div className="p-3 text-sm text-red-600 bg-red-50 rounded-lg border border-red-200">
+                                    {error}
+                                </div>
+                            )}
+
+                            {/* CPF Field */}
+                            <div className="flex flex-col gap-1.5">
+                                <Label htmlFor="cpf" className="text-sm font-medium text-gray-700">
+                                    CPF
+                                </Label>
+                                <div className="relative">
+                                    <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                    <Input
+                                        id="cpf"
+                                        type="text"
+                                        placeholder="Digite seu CPF"
+                                        value={cpf}
+                                        onChange={(e) => setCpf(maskCpf(e.target.value))}
+                                        disabled={isLoading}
+                                        required
+                                        className="pl-10 h-11 border-gray-200 rounded-lg text-gray-800 placeholder:text-gray-400"
+                                        maxLength={14}
+                                    />
+                                </div>
                             </div>
-                        )}
 
-                        <div className="space-y-2">
-                            <Label htmlFor="cpf">CPF</Label>
-                            <div className="relative">
-                                <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                                <Input
-                                    id="cpf"
-                                    type="text"
-                                    placeholder="Digite seu CPF"
-                                    value={cpf}
-                                    onChange={(e) => setCpf(maskCpf(e.target.value))}
-                                    disabled={isLoading}
-                                    required
-                                    className="pl-10 h-11"
-                                    maxLength={14}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="space-y-1">
-                            <div className="space-y-2">
-                                <Label htmlFor="senha">Senha</Label>
+                            {/* Password Field */}
+                            <div className="flex flex-col gap-1.5">
+                                <Label htmlFor="senha" className="text-sm font-medium text-gray-700">
+                                    Senha
+                                </Label>
                                 <div className="relative">
                                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                                     <Input
@@ -134,62 +143,65 @@ export default function LoginPage() {
                                         onChange={(e) => setSenha(e.target.value)}
                                         disabled={isLoading}
                                         required
-                                        className="pl-10 h-11"
+                                        className="pl-10 pr-11 h-11 border-gray-200 rounded-lg text-gray-800 placeholder:text-gray-400"
                                     />
-                                    <Button
+                                    <button
                                         type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
                                         onClick={() => setShowPassword(!showPassword)}
+                                        tabIndex={-1}
                                     >
                                         {showPassword ? (
-                                            <EyeOff className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                                            <EyeOff className="h-4 w-4" />
                                         ) : (
-                                            <Eye className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                                            <Eye className="h-4 w-4" />
                                         )}
-                                    </Button>
+                                    </button>
+                                </div>
+
+                                {/* Forgot password */}
+                                <div className="flex justify-end mt-0.5">
+                                    <Link
+                                        href="/esqueci-senha"
+                                        className="text-sm text-blue-600 hover:text-blue-800 hover:underline transition-colors"
+                                    >
+                                        Esqueci minha senha
+                                    </Link>
                                 </div>
                             </div>
-                            <div className="flex justify-end">
-                                <Link
-                                    href="/esqueci-senha"
-                                    className="text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 hover:underline"
-                                >
-                                    Esqueci minha senha
-                                </Link>
-                            </div>
+
+                            {/* Submit Button */}
+                            <Button
+                                type="submit"
+                                className="w-full h-11 text-base font-semibold rounded-lg mt-2 bg-[#1a3a6e] hover:bg-[#152e57] text-white"
+                                disabled={isLoading}
+                            >
+                                {isLoading ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                        Entrando...
+                                    </>
+                                ) : (
+                                    'Entrar'
+                                )}
+                            </Button>
+                        </form>
+
+                        {/* Footer */}
+                        <div className="flex flex-col items-center gap-3 pt-2 border-t border-gray-100">
+                            <p className="text-xs text-gray-400">
+                                © 2026 SIAGOV - Todos os direitos reservados
+                            </p>
+                            <Image
+                                src="/Logo_SIAGOV.png"
+                                alt="SIAGOV - Assessoria e Consultoria em Gestão Governamental"
+                                width={140}
+                                height={48}
+                                className="object-contain opacity-85"
+                            />
                         </div>
-
-                    </CardContent>
-
-                    <CardFooter className="flex flex-col gap-4 pt-6">
-                        <Button
-                            type="submit"
-                            className="w-full h-11 text-base font-semibold bg-[#003366] hover:bg-[#002244] text-white shadow-sm"
-                            disabled={isLoading}
-                        >
-                            {isLoading ? (
-                                <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Entrando...
-                                </>
-                            ) : (
-                                'Entrar'
-                            )}
-                        </Button>
-
-                        <div className="w-full p-4 bg-blue-50 dark:bg-blue-900/10 rounded-lg border border-blue-100 dark:border-blue-900/20 text-sm text-blue-800 dark:text-blue-200">
-                            <p className="font-semibold mb-1">Credenciais de demonstração:</p>
-                            <p>Usuário (CPF): 123.456.789-00</p>
-                            <p>Senha: 123456</p>
-                        </div>
-                    </CardFooter>
-                </form>
-            </Card>
-
-            <div className="mt-8 text-center text-sm text-muted-foreground">
-                <p>© 2024 SIAGOV - Todos os direitos reservados</p>
+                    </div>
+                </div>
             </div>
         </div>
     );
