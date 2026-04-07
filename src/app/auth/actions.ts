@@ -1,5 +1,6 @@
 'use server'
 
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 
@@ -30,9 +31,16 @@ export async function loginWithCpf(formData: FormData) {
     const cpfMasked = cleanNumbers.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
 
     const supabase = await createClient();
+    
+    // Usamos um admin client exclusivo para esta busca antes do usuário estar logado,
+    // pois a política de RLS na tabela usuarios. bloqueia operações SELECT de usuários anônimos
+    const supabaseAdmin = createSupabaseClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
 
     // 1. Lookup Email and User Data by CPF
-    const { data: userData, error: userError } = await supabase
+    const { data: userData, error: userError } = await supabaseAdmin
         .from('usuarios')
         .select(`
             id,
@@ -56,7 +64,7 @@ export async function loginWithCpf(formData: FormData) {
 
     const email = userData.email;
 
-    // 2. Sign In
+    // 2. Sign In (usa client normal para criar sessão pro usuário)
     const { error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
