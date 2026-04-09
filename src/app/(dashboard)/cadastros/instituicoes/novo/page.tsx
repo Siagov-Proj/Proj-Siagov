@@ -173,7 +173,7 @@ export default function NovaInstituicaoPage() {
                 </CardHeader>
                 <CardContent>
                     <div className="grid gap-6">
-                        {/* Código (readonly), Nome e Nome Abreviado */}
+                        {/* Código (editável), Nome e Nome Abreviado */}
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div className="space-y-2">
                                 <div className="flex items-center gap-1">
@@ -183,10 +183,10 @@ export default function NovaInstituicaoPage() {
                                 <Input
                                     id="codigo"
                                     value={formData.codigo}
-                                    readOnly
+                                    onChange={(e) => setFormData({ ...formData, codigo: e.target.value.replace(/\D/g, '').substring(0, 3) })}
                                     maxLength={3}
                                     placeholder="001"
-                                    className={`font-mono bg-muted ${errors.codigo ? 'border-red-500' : ''}`}
+                                    className={`font-mono ${errors.codigo ? 'border-red-500' : ''}`}
                                 />
                                 {errors.codigo && <p className="text-sm text-red-500">{errors.codigo}</p>}
                             </div>

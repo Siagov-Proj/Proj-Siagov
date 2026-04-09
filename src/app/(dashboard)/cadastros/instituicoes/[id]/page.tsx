@@ -211,18 +211,19 @@ export default function EditarInstituicaoPage() {
                 </CardHeader>
                 <CardContent>
                     <div className="grid gap-6">
-                        {/* Código (readonly), Nome e Nome Abreviado */}
+                        {/* Código (editável), Nome e Nome Abreviado */}
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div className="space-y-2">
                                 <div className="flex items-center gap-1">
                                     <Label htmlFor="codigo">Código</Label>
-                                    <FieldTooltip content="Código sequencial (não editável)" />
+                                    <FieldTooltip content="Código sequencial sugerido automaticamente. Pode ser editado." />
                                 </div>
                                 <Input
                                     id="codigo"
                                     value={formData.codigo}
-                                    readOnly
-                                    className="bg-muted font-mono"
+                                    onChange={(e) => setFormData({ ...formData, codigo: e.target.value.replace(/\D/g, '').substring(0, 3) })}
+                                    maxLength={3}
+                                    className={`font-mono ${errors.codigo ? 'border-red-500' : ''}`}
                                 />
                             </div>
 

@@ -103,7 +103,7 @@ export default function NovoUsuarioPage() {
     const [instituicoes, setInstituicoes] = useState<IInstituicaoDB[]>([]);
     const [unidadesOrigem, setUnidadesOrigem] = useState<IUnidadeGestoraDB[]>([]);
     const [loadingInstituicoes, setLoadingInstituicoes] = useState(true);
-    const [loadingCodigo, setLoadingCodigo] = useState(true);
+    const [loadingCodigo, setLoadingCodigo] = useState(false);
 
     const carregarProximoCodigo = useCallback(async () => {
         try {
@@ -520,7 +520,6 @@ export default function NovoUsuarioPage() {
                                     maxLength={6}
                                     placeholder={loadingCodigo ? 'Gerando...' : '000001'}
                                     className={`font-mono w-full ${erros.codigo ? 'border-red-500' : ''}`}
-                                    disabled={loadingCodigo}
                                 />
                                 {erros.codigo && <p className="text-sm text-red-500">{erros.codigo}</p>}
                             </div>

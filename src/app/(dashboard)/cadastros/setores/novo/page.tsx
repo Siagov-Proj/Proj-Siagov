@@ -306,7 +306,6 @@ export default function NovoSetorPage() {
                                     maxLength={4}
                                     placeholder={loadingCodigo ? 'Gerando...' : '0000'}
                                     className={`font-mono ${errors.codigo ? 'border-red-500' : ''}`}
-                                    disabled={loadingCodigo}
                                 />
                                 {errors.codigo && <p className="text-sm text-red-500">{errors.codigo}</p>}
                             </div>

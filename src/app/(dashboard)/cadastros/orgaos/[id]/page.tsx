@@ -175,11 +175,13 @@ export default function EditarOrgaoPage() {
                                 <Input
                                     id="codigo"
                                     value={formData.codigo}
-                                    onChange={(e) => setFormData({ ...formData, codigo: maskCodigoComZeros(e.target.value, 6) })}
+                                    onChange={(e) => {
+                                        const val = e.target.value.replace(/\D/g, '').substring(0, 6);
+                                        setFormData(prev => ({ ...prev, codigo: val }));
+                                    }}
                                     maxLength={6}
                                     placeholder="000001"
-                                    className={`${errors.codigo ? 'border-red-500' : ''} bg-muted`}
-                                    readOnly
+                                    className={`${errors.codigo ? 'border-red-500' : ''}`}
                                 />
                                 {errors.codigo && <p className="text-sm text-red-500">{errors.codigo}</p>}
                             </div>

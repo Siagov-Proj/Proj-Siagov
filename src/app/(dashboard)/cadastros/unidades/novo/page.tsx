@@ -295,7 +295,6 @@ export default function NovaUnidadePage() {
                                 maxLength={6}
                                 placeholder={loadingCodigo ? 'Gerando...' : '000000'}
                                 className={`font-mono w-32 ${errors.codigo ? 'border-red-500' : ''}`}
-                                disabled={loadingCodigo}
                             />
                             {loadingCodigo && <p className="text-xs text-muted-foreground">Gerando código sequencial...</p>}
                             {errors.codigo && <p className="text-sm text-red-500">{errors.codigo}</p>}

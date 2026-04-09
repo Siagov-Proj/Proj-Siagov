@@ -69,7 +69,7 @@ export default function NovoCargoPage() {
     const [loadingOrgaos, setLoadingOrgaos] = useState(false);
     const [loadingUnidades, setLoadingUnidades] = useState(false);
     const [loadingSetores, setLoadingSetores] = useState(false);
-    const [loadingCodigo, setLoadingCodigo] = useState(true);
+    const [loadingCodigo, setLoadingCodigo] = useState(false);
 
     // Permissões
     const [todasPermissoes, setTodasPermissoes] = useState<IPermissaoDB[]>([]);
@@ -403,7 +403,6 @@ export default function NovoCargoPage() {
                                     maxLength={3}
                                     placeholder={loadingCodigo ? 'Gerando...' : '001'}
                                     className={`font-mono w-full ${errors.codigo ? 'border-red-500' : ''}`}
-                                    disabled={loadingCodigo}
                                 />
                                 {errors.codigo && <p className="text-sm text-red-500">{errors.codigo}</p>}
                             </div>

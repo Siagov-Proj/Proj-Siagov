@@ -192,12 +192,13 @@ export default function NovoOrgaoPage() {
                                     <Input
                                         id="codigo"
                                         value={formData.codigo}
-                                        onChange={(e) => setFormData({ ...formData, codigo: maskCodigoComZeros(e.target.value, 6) })}
+                                        onChange={(e) => {
+                                            const val = e.target.value.replace(/\D/g, '').substring(0, 6);
+                                            setFormData(prev => ({ ...prev, codigo: val }));
+                                        }}
                                         maxLength={6}
                                         placeholder={loadingCodigo ? 'Gerando...' : '000001'}
                                         className={`font-mono ${errors.codigo ? 'border-red-500' : ''}`}
-                                        disabled={loadingCodigo}
-                                        readOnly
                                     />
                                     {loadingCodigo && (
                                         <Loader2 className="absolute right-3 top-3 h-4 w-4 animate-spin text-muted-foreground" />
