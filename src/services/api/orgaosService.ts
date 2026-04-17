@@ -36,7 +36,7 @@ export const orgaosService = {
             .from(TABLE_NAME)
             .select('*, instituicao:instituicoes(id, nome, codigo)')
             .eq('excluido', false)
-            .order('nome', { ascending: true });
+            .order('codigo', { ascending: true });
 
         const termoSanitizado = termoBusca ? sanitizeSearchTerm(termoBusca) : '';
 
@@ -189,7 +189,7 @@ export const orgaosService = {
             .select('*, instituicao:instituicoes(id, nome, codigo)')
             .eq('instituicao_id', instituicaoId)
             .eq('excluido', false)
-            .order('nome', { ascending: true });
+            .order('codigo', { ascending: true });
 
         if (error) {
             console.error('Erro ao listar órgãos por instituição:', error);

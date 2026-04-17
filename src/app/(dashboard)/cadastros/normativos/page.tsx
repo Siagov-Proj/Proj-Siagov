@@ -51,6 +51,7 @@ import { LeisCadastroDialog } from '@/components/normativos/LeisCadastroDialog';
 import { useCadastroDialogs } from '@/components/cadastros/cadastro-dialog-provider';
 import { ListPagination } from '@/components/ui/list-pagination';
 import { compareNormativoLabels } from '@/utils';
+import { toast } from 'sonner';
 
 interface ICategoriaComSubcategorias extends ICategoriaDocumentoDB {
     subcategorias?: ISubcategoriaDocumentoDB[];
@@ -85,13 +86,22 @@ export default function NormativosPage() {
                 );
             }
 
-            // Carregar subcategorias para cada categoria
-            const categoriasComSub: ICategoriaComSubcategorias[] = await Promise.all(
-                filtradas.map(async (cat) => {
-                    const subcategorias = await categoriasDocService.listarSubcategorias(cat.id);
-                    return { ...cat, subcategorias };
-                })
-            );
+            // Carregar todas as subcategorias de uma vez (evita N+1 queries)
+            const categoriaIds = filtradas.map(cat => cat.id);
+            const todasSubcategorias = await categoriasDocService.listarSubcategoriasPorCategorias(categoriaIds);
+
+            // Agrupar subcategorias por categoria_id
+            const subsPorCategoria = new Map<string, typeof todasSubcategorias>();
+            for (const sub of todasSubcategorias) {
+                const lista = subsPorCategoria.get(sub.categoria_id) || [];
+                lista.push(sub);
+                subsPorCategoria.set(sub.categoria_id, lista);
+            }
+
+            const categoriasComSub: ICategoriaComSubcategorias[] = filtradas.map(cat => ({
+                ...cat,
+                subcategorias: subsPorCategoria.get(cat.id) || [],
+            }));
 
             setCategorias(
                 categoriasComSub
@@ -140,16 +150,12 @@ export default function NormativosPage() {
 
         try {
             setDeleting(id);
-            const count = await categoriasDocService.contarSubcategorias(id);
-            if (count > 0) {
-                alert('Não é possível excluir uma categoria que possui subcategorias.');
-                return;
-            }
             await categoriasDocService.excluirCategoria(id);
             setCategorias(categorias.filter((cat) => cat.id !== id));
+            toast.success('Categoria excluída com sucesso!');
         } catch (err) {
-            console.error('Erro ao excluir categoria:', err);
-            alert('Erro ao excluir categoria. Tente novamente.');
+            const message = err instanceof Error ? err.message : 'Erro ao excluir categoria. Tente novamente.';
+            toast.error(message);
         } finally {
             setDeleting(null);
         }

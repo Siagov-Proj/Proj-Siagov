@@ -9,6 +9,7 @@ import {
 interface IDocumentoServerPayload {
     titulo: string;
     tipo: string;
+    formato?: string;
     categoria_id: string;
     subcategoria_id: string;
     processo_id?: string;
@@ -137,15 +138,31 @@ export const documentosServerService = {
             throw new Error('Sessao invalida. Faca login novamente para enviar anexos.');
         }
 
-        const anexosPersistiveis = input.anexos.length > 0 && await suportaPersistenciaDeAnexos();
+        const temAnexos = input.anexos.length > 0;
+        const bufferMap = new Map<File, ArrayBuffer>();
 
-        if (anexosPersistiveis) {
+        // Validar assinaturas de todos os arquivos ANTES de qualquer operação
+        if (temAnexos) {
             for (const anexo of input.anexos) {
-                const validacao = await validateDocumentFileSignature(anexo);
+                const buffer = await anexo.arrayBuffer();
+                bufferMap.set(anexo, buffer);
+
+                const validacao = await validateDocumentFileSignature(anexo, buffer);
                 if (!validacao.valido) {
                     throw new Error(validacao.mensagem || `Arquivo invalido: ${anexo.name}`);
                 }
             }
+        }
+
+        // Verificar se a infra suporta persistência de anexos
+        const infraPronta = await suportaPersistenciaDeAnexos();
+
+        // Se o usuário enviou anexos mas a tabela não existe, BLOQUEAR em vez de salvar sem eles
+        if (temAnexos && !infraPronta) {
+            throw new Error(
+                'Nao foi possivel salvar os anexos porque a tabela de anexos ainda nao foi criada no banco de dados. '
+                + 'Entre em contato com o administrador do sistema para aplicar a migration pendente.'
+            );
         }
 
         const documento = await criarDocumentoBase(input.payload);
@@ -154,11 +171,11 @@ export const documentosServerService = {
         try {
             await registrarHistoricoObrigatorio(documento.id);
 
-            if (anexosPersistiveis) {
+            if (temAnexos && infraPronta) {
                 for (const anexo of input.anexos) {
                     const nomeSanitizado = sanitizeDocumentFileName(anexo.name);
                     const storagePath = `${documento.id}/${Date.now()}_${nomeSanitizado}`;
-                    const arquivoBuffer = await anexo.arrayBuffer();
+                    const arquivoBuffer = bufferMap.get(anexo) || await anexo.arrayBuffer();
 
                     const { error: uploadError } = await supabase.storage
                         .from('anexos')
@@ -191,9 +208,6 @@ export const documentosServerService = {
             return {
                 documentoId: documento.id,
                 numero: documento.numero,
-                warning: input.anexos.length > 0 && !anexosPersistiveis
-                    ? 'Documento salvo, mas os anexos nao foram persistidos porque a tabela de anexos ainda nao existe no banco.'
-                    : undefined,
             };
         } catch (error) {
             await rollbackDocumento(documento.id, uploadedPaths);

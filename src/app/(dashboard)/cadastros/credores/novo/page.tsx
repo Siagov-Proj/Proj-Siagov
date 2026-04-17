@@ -23,6 +23,7 @@ import { ActionBar } from '@/components/ui/action-bar';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { maskCnpj, maskCpf, maskCep, maskTelefone, maskNitPisPasep, maskInscricaoEstadual } from '@/utils/masks';
+import { validateCpf, validateCnpj } from '@/utils/formatters';
 import { TIPOS_CREDOR, TIPOS_CONTA_BANCARIA, ESTADOS_BRASIL } from '@/utils/constants';
 import type { ICredor } from '@/types';
 import { credoresService } from '@/services/api/credoresService';
@@ -121,18 +122,42 @@ const credorSchema = z.object({
     inativo: z.boolean(),
     bloqueado: z.boolean(),
 }).superRefine((data, ctx) => {
-    if (data.tipoCredor === 'Jurídica' && data.identificador.replace(/\D/g, '').length !== 14) {
-        ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: ['identificador'],
-            message: 'CNPJ inválido (deve conter 14 dígitos)',
-        });
+    const digits = data.identificador.replace(/\D/g, '');
+    if (data.tipoCredor === 'Jurídica') {
+        if (digits.length !== 14) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['identificador'],
+                message: 'CNPJ inválido (deve conter 14 dígitos)',
+            });
+        } else if (!validateCnpj(data.identificador)) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['identificador'],
+                message: 'CNPJ inválido. Verifique os dígitos informados.',
+            });
+        }
     }
-    if (data.tipoCredor === 'Física' && data.identificador.replace(/\D/g, '').length !== 11) {
+    if (data.tipoCredor === 'Física') {
+        if (digits.length !== 11) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['identificador'],
+                message: 'CPF inválido (deve conter 11 dígitos)',
+            });
+        } else if (!validateCpf(data.identificador)) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['identificador'],
+                message: 'CPF inválido. Verifique os dígitos informados.',
+            });
+        }
+    }
+    if (data.cpfAdministrador && data.cpfAdministrador.replace(/\D/g, '').length === 11 && !validateCpf(data.cpfAdministrador)) {
         ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            path: ['identificador'],
-            message: 'CPF inválido (deve conter 11 dígitos)',
+            path: ['cpfAdministrador'],
+            message: 'CPF do Administrador inválido. Verifique os dígitos informados.',
         });
     }
 });

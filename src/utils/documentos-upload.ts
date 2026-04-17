@@ -13,6 +13,8 @@ export const ALLOWED_DOCUMENT_EXTENSIONS = [
     '.txt',
     '.md',
     '.markdown',
+    '.xls',
+    '.xlsx',
 ] as const;
 
 export const ALLOWED_DOCUMENT_MIME_TYPES = [
@@ -28,6 +30,8 @@ export const ALLOWED_DOCUMENT_MIME_TYPES = [
     'text/plain',
     'text/markdown',
     'text/x-markdown',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'application/octet-stream',
 ] as const;
 
@@ -99,14 +103,20 @@ function hasNoNullBytes(bytes: Uint8Array): boolean {
     return !bytes.some((byte) => byte === 0);
 }
 
-export async function validateDocumentFileSignature(file: File): Promise<IDocumentUploadValidationResult> {
+export async function validateDocumentFileSignature(file: File, preloadedBuffer?: ArrayBuffer): Promise<IDocumentUploadValidationResult> {
     const metadata = validateDocumentFileMetadata(file);
 
     if (!metadata.valido || !metadata.extensao) {
         return metadata;
     }
 
-    const header = new Uint8Array(await file.slice(0, 32).arrayBuffer());
+    let header: Uint8Array;
+    if (preloadedBuffer) {
+        header = new Uint8Array(preloadedBuffer.slice(0, 32));
+    } else {
+        header = new Uint8Array(await file.slice(0, 32).arrayBuffer());
+    }
+    
     const signature = Array.from(header)
         .map((byte) => byte.toString(16).padStart(2, '0'))
         .join('');
@@ -143,6 +153,14 @@ export async function validateDocumentFileSignature(file: File): Promise<IDocume
             return hasNoNullBytes(header)
                 ? { valido: true, extensao: metadata.extensao }
                 : { valido: false, mensagem: `O arquivo "${file.name}" nao corresponde a um arquivo de texto valido.` };
+        case '.xls':
+            return hasCompoundFileSignature(signature)
+                ? { valido: true, extensao: metadata.extensao }
+                : { valido: false, mensagem: `O arquivo "${file.name}" nao corresponde a um XLS valido.` };
+        case '.xlsx':
+            return hasZipSignature(signature)
+                ? { valido: true, extensao: metadata.extensao }
+                : { valido: false, mensagem: `O arquivo "${file.name}" nao corresponde a um XLSX valido.` };
         default:
             return { valido: false, mensagem: `O arquivo "${file.name}" possui um formato nao suportado.` };
     }

@@ -18,6 +18,7 @@ export async function criarDocumentoComAnexosAction(formData: FormData) {
             payload: {
                 titulo: getStringValue(formData, 'titulo'),
                 tipo: getStringValue(formData, 'tipo'),
+                formato: getStringValue(formData, 'formato') || undefined,
                 categoria_id: getStringValue(formData, 'categoriaId'),
                 subcategoria_id: getStringValue(formData, 'subcategoriaId'),
                 processo_id: getStringValue(formData, 'processoId') || undefined,

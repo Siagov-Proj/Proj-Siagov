@@ -16,6 +16,7 @@ import {
 import { ActionBar } from '@/components/ui/action-bar';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { maskCnpj, maskCep, maskTelefone } from '@/utils/masks';
+import { validateCnpj } from '@/utils/formatters';
 import { TIPOS_ADMINISTRACAO, GRUPOS_INDIRETA, FIELD_LIMITS } from '@/utils/constants';
 import type { IUnidadeGestora } from '@/types';
 import { ArrowLeft, Loader2 } from 'lucide-react';
@@ -132,6 +133,9 @@ export default function NovaUnidadePage() {
         if (!formData.tipoAdministracao) newErrors.tipoAdministracao = 'Tipo de administração é obrigatório';
         if (formData.tipoAdministracao === 'Indireta' && !formData.grupoIndireta) {
             newErrors.grupoIndireta = 'Grupo é obrigatório para administração indireta';
+        }
+        if (formData.cnpj && !validateCnpj(formData.cnpj)) {
+            newErrors.cnpj = 'CNPJ inválido';
         }
 
         setErrors(newErrors);
@@ -429,7 +433,7 @@ export default function NovaUnidadePage() {
 
                         {/* CNPJ e Ordenador */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="space-y-2">
+                             <div className="space-y-2">
                                 <Label htmlFor="cnpj">CNPJ</Label>
                                 <Input
                                     id="cnpj"
@@ -437,8 +441,10 @@ export default function NovaUnidadePage() {
                                     onChange={(e) => setFormData({ ...formData, cnpj: maskCnpj(e.target.value) })}
                                     maxLength={18}
                                     placeholder="00.000.000/0001-00"
+                                    className={errors.cnpj ? 'border-red-500' : ''}
                                 />
-                            </div>
+                                {errors.cnpj && <p className="text-sm text-red-500">{errors.cnpj}</p>}
+                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="ordenadorDespesa">Ordenador de Despesa</Label>
                                 <Input
@@ -458,9 +464,9 @@ export default function NovaUnidadePage() {
                                 <Input
                                     id="ugTce"
                                     value={formData.ugTce}
-                                    onChange={(e) => setFormData({ ...formData, ugTce: e.target.value.replace(/\D/g, '').substring(0, 5) })}
-                                    maxLength={5}
-                                    placeholder="00000"
+                                    onChange={(e) => setFormData({ ...formData, ugTce: e.target.value.replace(/\D/g, '').substring(0, 6) })}
+                                    maxLength={6}
+                                    placeholder="000000"
                                 />
                             </div>
                             <div className="space-y-2">

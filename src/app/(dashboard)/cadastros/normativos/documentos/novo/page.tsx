@@ -31,6 +31,7 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { ArrowLeft, FileText, Upload, X, Target, FileUp, Hash, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -54,6 +55,13 @@ const TIPOS_DOCUMENTO = [
     'DFD',
     'Memorando',
     'Ofício',
+    'Checklist',
+];
+
+const FORMATOS_DOCUMENTO = [
+    { value: 'pdf', label: 'PDF' },
+    { value: 'docx', label: 'Word (DOCX)' },
+    { value: 'xlsx', label: 'Excel (XLSX)' },
 ];
 
 interface Anexo {
@@ -73,6 +81,7 @@ function buildDocumentoFormData(data: DocumentoFormValues, anexos: Anexo[], opti
 
     formData.append('titulo', data.titulo || options.tituloPadrao);
     formData.append('tipo', data.tipo);
+    formData.append('formato', data.formato || '');
     formData.append('categoriaId', data.categoriaId);
     formData.append('subcategoriaId', data.subcategoriaId);
     formData.append('processoId', data.processoId || '');
@@ -93,6 +102,7 @@ function buildDocumentoFormData(data: DocumentoFormValues, anexos: Anexo[], opti
 const documentoSchema = z.object({
     titulo: z.string().trim().max(200, 'Titulo deve ter no maximo 200 caracteres').optional(),
     tipo: z.string().min(1, 'Tipo é obrigatório'),
+    formato: z.string().min(1, 'Formato é obrigatório'),
     categoriaId: z.string().uuid('Categoria invalida'),
     subcategoriaId: z.string().uuid('Subcategoria invalida'),
     processoId: z.string().uuid('Processo invalido').optional().or(z.literal('')),
@@ -118,6 +128,7 @@ export default function NovoDocumentoPage() {
         defaultValues: {
             titulo: '',
             tipo: '',
+            formato: '',
             categoriaId: categoriaIdParam || '',
             subcategoriaId: '',
             processoId: '',
@@ -196,6 +207,7 @@ export default function NovoDocumentoPage() {
         form.reset({
             titulo: '',
             tipo: '',
+            formato: '',
             categoriaId: categoriaIdParam || '',
             subcategoriaId: '',
             processoId: '',
@@ -229,7 +241,7 @@ export default function NovoDocumentoPage() {
         });
 
         if (errosEncontrados.length > 0) {
-            alert(`Alguns arquivos não puderam ser adicionados:\n\n${errosEncontrados.join('\n')}`);
+            toast.warning(`Alguns arquivos não puderam ser adicionados:\n${errosEncontrados.join('\n')}`);
         }
 
         setAnexos([...anexos, ...novosAnexos]);
@@ -319,7 +331,40 @@ export default function NovoDocumentoPage() {
                                 )}
                             />
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {/* Formato */}
+                                <FormField
+                                    control={form.control}
+                                    name="formato"
+                                    render={({ field }) => (
+                                        <FormItem className="space-y-2">
+                                            <div className="flex items-center gap-1">
+                                                <FormLabel>
+                                                    Formato de Documento<span className="text-red-500 ml-1">*</span>
+                                                </FormLabel>
+                                                <FieldTooltip content="Formato do arquivo do documento (PDF, Word ou Excel)" />
+                                            </div>
+                                            <Select
+                                                onValueChange={field.onChange}
+                                                defaultValue={field.value}
+                                                value={field.value}
+                                            >
+                                                <FormControl>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Selecione o formato" />
+                                                    </SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>
+                                                    {FORMATOS_DOCUMENTO.map((fmt) => (
+                                                        <SelectItem key={fmt.value} value={fmt.value}>{fmt.label}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+
                                 {/* Tipo */}
                                 <FormField
                                     control={form.control}

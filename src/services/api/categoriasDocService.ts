@@ -156,25 +156,48 @@ export const categoriasDocService = {
     async excluirCategoria(id: string): Promise<void> {
         const supabase = getSupabaseClient();
 
-        // Primeiro exclui as subcategorias
+        // Verificar se há subcategorias ativas antes de excluir
+        const count = await this.contarSubcategorias(id);
+        if (count > 0) {
+            throw new Error('Não é possível excluir uma categoria que possui subcategorias ativas.');
+        }
+
+        // Soft-delete das subcategorias já inativas (limpeza)
         await supabase
             .from(TABLE_SUBCATEGORIAS)
             .update({ excluido: true })
             .eq('categoria_id', id);
 
-        // Depois exclui a categoria
+        // Soft-delete da categoria
         const { error } = await supabase
             .from(TABLE_CATEGORIAS)
             .update({ excluido: true })
             .eq('id', id);
 
         if (error) {
-            console.error('Erro ao excluir categoria:', error);
             throw error;
         }
     },
 
     // ========== SUBCATEGORIAS ==========
+    async listarSubcategoriasPorCategorias(categoriaIds: string[]): Promise<ISubcategoriaDocumentoDB[]> {
+        if (categoriaIds.length === 0) return [];
+        const supabase = getSupabaseClient();
+        const { data, error } = await supabase
+            .from(TABLE_SUBCATEGORIAS)
+            .select('*')
+            .in('categoria_id', categoriaIds)
+            .eq('excluido', false)
+            .order('nome', { ascending: true });
+
+        if (error) {
+            console.error('Erro ao listar subcategorias em batch:', error);
+            throw error;
+        }
+
+        return data as ISubcategoriaDocumentoDB[];
+    },
+
     async listarSubcategorias(categoriaId: string): Promise<ISubcategoriaDocumentoDB[]> {
         const supabase = getSupabaseClient();
         const { data, error } = await supabase

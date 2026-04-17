@@ -17,6 +17,7 @@ import { ActionBar } from '@/components/ui/action-bar';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { ArrowLeft, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { maskCpf } from '@/utils/masks';
+import { validateCpf } from '@/utils/formatters';
 import { FIELD_LIMITS } from '@/utils/constants';
 import {
     usuariosService,
@@ -59,6 +60,7 @@ const formDataVazio = {
     perfilAcesso: '',
     senha: '',
     confirmarSenha: '',
+    dataCadastro: '',
 };
 
 export default function EditarUsuarioPage() {
@@ -141,6 +143,7 @@ export default function EditarUsuarioPage() {
                     perfilAcesso: usuario.permissoes?.[0] || '',
                     senha: '', // Não carregamos senha
                     confirmarSenha: '',
+                    dataCadastro: usuario.created_at || '',
                 };
                 setFormData(data);
                 setOriginalData(data);
@@ -262,8 +265,13 @@ export default function EditarUsuarioPage() {
 
         if (!formData.codigo) novosErros.codigo = 'Código é obrigatório';
         if (!formData.nome) novosErros.nome = 'Nome é obrigatório';
-        if (!formData.cpf) novosErros.cpf = 'CPF é obrigatório';
-        if (formData.cpf && formData.cpf.length < 14) novosErros.cpf = 'CPF incompleto';
+        if (!formData.cpf) {
+            novosErros.cpf = 'CPF é obrigatório';
+        } else if (formData.cpf.length < 14) {
+            novosErros.cpf = 'CPF incompleto';
+        } else if (!validateCpf(formData.cpf)) {
+            novosErros.cpf = 'CPF inválido';
+        }
         if (!formData.emailInstitucional) novosErros.emailInstitucional = 'E-mail Institucional é obrigatório';
         if (!formData.instituicaoId) novosErros.instituicaoId = 'Instituição é obrigatória';
         if (!formData.orgaoId) novosErros.orgaoId = 'Órgão é obrigatório';
@@ -358,12 +366,21 @@ export default function EditarUsuarioPage() {
                                 <Input
                                     id="codigo"
                                     value={formData.codigo}
-                                    onChange={(e) => setFormData({ ...formData, codigo: e.target.value.substring(0, 10) })}
-                                    maxLength={10}
+                                    onChange={(e) => setFormData({ ...formData, codigo: e.target.value.substring(0, 6) })}
+                                    maxLength={6}
                                     placeholder="Código"
                                     className={`font-mono w-full ${erros.codigo ? 'border-red-500' : ''}`}
                                 />
                                 {erros.codigo && <p className="text-sm text-red-500">{erros.codigo}</p>}
+                            </div>
+
+                            <div className="space-y-2">
+                                <Label>Data de Cadastro</Label>
+                                <Input
+                                    value={formData.dataCadastro ? new Date(formData.dataCadastro).toLocaleDateString('pt-BR') : '-'}
+                                    disabled
+                                    className="bg-muted"
+                                />
                             </div>
 
                             <div className="space-y-2 sm:col-span-1">
@@ -437,6 +454,8 @@ export default function EditarUsuarioPage() {
                                     <SelectContent>
                                         <SelectItem value="Efetivo">Efetivo</SelectItem>
                                         <SelectItem value="Efetivo-Comissionado">Efetivo-Comissionado</SelectItem>
+                                        <SelectItem value="Comissionado">Comissionado</SelectItem>
+                                        <SelectItem value="Cumulativo">Cumulativo</SelectItem>
                                         <SelectItem value="CLT">CLT</SelectItem>
                                         <SelectItem value="Estagiário">Estagiário</SelectItem>
                                         <SelectItem value="Requisitado">Requisitado</SelectItem>

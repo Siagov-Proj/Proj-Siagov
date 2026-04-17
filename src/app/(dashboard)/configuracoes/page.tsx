@@ -26,11 +26,14 @@ import {
     Loader2
 } from 'lucide-react';
 import { configuracoesService, IConfiguracaoDB } from '@/services/api/configuracoesService';
+import { maskCnpj } from '@/utils/masks';
+import { validateCnpj } from '@/utils/formatters';
 
 export default function ConfiguracoesPage() {
     const [salvando, setSalvando] = useState(false);
     const [carregando, setCarregando] = useState(true);
     const [configId, setConfigId] = useState<string | null>(null);
+    const [erroCnpj, setErroCnpj] = useState('');
 
     // Estados de configuração
     const [configGeral, setConfigGeral] = useState({
@@ -91,6 +94,12 @@ export default function ConfiguracoesPage() {
     }, [carregarConfiguracoes]);
 
     const salvarConfiguracoes = async () => {
+        // Validar CNPJ antes de salvar
+        if (configGeral.cnpj && !validateCnpj(configGeral.cnpj)) {
+            setErroCnpj('CNPJ inválido');
+            return;
+        }
+        setErroCnpj('');
         setSalvando(true);
         try {
             const payload: Partial<IConfiguracaoDB> = {
@@ -212,10 +221,16 @@ export default function ConfiguracoesPage() {
                                     <Input
                                         id="cnpj"
                                         value={configGeral.cnpj}
-                                        onChange={(e) =>
-                                            setConfigGeral({ ...configGeral, cnpj: e.target.value })
-                                        }
+                                        onChange={(e) => {
+                                            const masked = maskCnpj(e.target.value);
+                                            setConfigGeral({ ...configGeral, cnpj: masked });
+                                            if (erroCnpj) setErroCnpj('');
+                                        }}
+                                        maxLength={18}
+                                        placeholder="00.000.000/0001-00"
+                                        className={erroCnpj ? 'border-red-500' : ''}
                                     />
+                                    {erroCnpj && <p className="text-sm text-red-500">{erroCnpj}</p>}
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="email">E-mail</Label>

@@ -172,6 +172,9 @@ export const documentosService = {
         if (termoSanitizado) {
             query = query.or(`titulo.ilike.%${termoSanitizado}%,numero.ilike.%${termoSanitizado}%`);
         }
+        if (filtros?.categoria && filtros.categoria !== 'todas') {
+            query = query.eq('categoria_id', filtros.categoria);
+        }
         if (filtros?.status && filtros.status !== 'todos') {
             query = query.eq('status', filtros.status);
         }
@@ -244,35 +247,30 @@ export const documentosService = {
             historicoQuery = historicoQuery.neq('acao', 'Download');
         }
 
-        const promises = [
+        // Queries paralelas nomeadas (evita offset frágil)
+        const [anexosResult, historicoResult, versoesResult, categoriaResult, subcategoriaResult, processoResult] = await Promise.all([
             supabase.from('documento_anexos').select('*').eq('documento_id', id),
             historicoQuery,
-            supabase.from('documento_versoes').select('*').eq('documento_id', id).order('versao', { ascending: false })
-        ];
-
-        if (doc.categoria_id) promises.push(supabase.from('categorias_documentos').select('nome, lei, codigo').eq('id', doc.categoria_id).single());
-        if (doc.subcategoria_id) promises.push(supabase.from('subcategorias_documentos').select('nome, codigo').eq('id', doc.subcategoria_id).single());
-        if (doc.processo_id) promises.push(supabase.from('processos').select('numero').eq('id', doc.processo_id).single());
-
-        const results = await Promise.all(promises);
-
-        const anexos = results[0].data || [];
-        const historico = results[1].data || [];
-        const versoes = results[2].data || [];
-
-        let offset = 3;
-        const categoria = doc.categoria_id ? results[offset++]?.data : undefined;
-        const subcategoria = doc.subcategoria_id ? results[offset++]?.data : undefined;
-        const processo = doc.processo_id ? results[offset++]?.data : undefined;
+            supabase.from('documento_versoes').select('*').eq('documento_id', id).order('versao', { ascending: false }),
+            doc.categoria_id
+                ? supabase.from('categorias_documentos').select('nome, lei, codigo').eq('id', doc.categoria_id).single()
+                : Promise.resolve({ data: undefined }),
+            doc.subcategoria_id
+                ? supabase.from('subcategorias_documentos').select('nome, codigo').eq('id', doc.subcategoria_id).single()
+                : Promise.resolve({ data: undefined }),
+            doc.processo_id
+                ? supabase.from('processos').select('numero').eq('id', doc.processo_id).single()
+                : Promise.resolve({ data: undefined }),
+        ]);
 
         return {
             ...doc,
-            anexos,
-            historico,
-            versoes,
-            categoria,
-            subcategoria,
-            processo
+            anexos: anexosResult.data || [],
+            historico: historicoResult.data || [],
+            versoes: versoesResult.data || [],
+            categoria: categoriaResult.data,
+            subcategoria: subcategoriaResult.data,
+            processo: processoResult.data,
         };
     },
 
@@ -501,10 +499,9 @@ export const documentosService = {
     async gerarUrlDownloadPDF(documentoId: string, expiresIn = 60): Promise<string> {
         const supabase = getSupabaseClient();
         
-        // Assumindo que os PDFs compilados ficam no bucket 'documentos' 
-        // com o nome igual ao ID do documento.
+        // Os PDFs compilados ficam no bucket 'anexos' com path baseado no ID
         const { data, error } = await supabase.storage
-            .from('documentos')
+            .from('anexos')
             .createSignedUrl(`${documentoId}.pdf`, expiresIn);
 
         if (error) {

@@ -159,13 +159,14 @@ export default function UsuariosPage() {
                                         <TableHead>E-mail Institucional</TableHead>
                                         <TableHead>Vínculo</TableHead>
                                         <TableHead>Perfil</TableHead>
+                                        <TableHead>Data Cadastro</TableHead>
                                         <TableHead className="w-24 text-center">Ações</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {usuarios.length === 0 ? (
                                         <TableRow>
-                                            <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                                            <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                                                 Nenhum usuário encontrado
                                             </TableCell>
                                         </TableRow>
@@ -184,6 +185,9 @@ export default function UsuariosPage() {
                                                     <Badge variant="outline">
                                                         {obterLabelPerfil(usuario.permissoes)}
                                                     </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-sm">
+                                                    {usuario.created_at ? new Date(usuario.created_at).toLocaleDateString('pt-BR') : '-'}
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="flex items-center justify-center gap-1">

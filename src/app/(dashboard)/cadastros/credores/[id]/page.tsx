@@ -24,6 +24,7 @@ import { ActionBar } from '@/components/ui/action-bar';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { maskCnpj, maskCpf, maskCep, maskTelefone, maskNitPisPasep, maskInscricaoEstadual } from '@/utils/masks';
+import { validateCpf, validateCnpj } from '@/utils/formatters';
 import { TIPOS_CREDOR, TIPOS_CONTA_BANCARIA, ESTADOS_BRASIL, FIELD_LIMITS } from '@/utils/constants';
 import type { ICredor } from '@/types';
 import { credoresService } from '@/services/api/credoresService';
@@ -209,17 +210,34 @@ export default function EditarCredorPage() {
         if (!formData.identificador) novosErros.cpfCnpj = 'Identificador é obrigatório';
         if (!formData.nome) novosErros.nome = 'Nome/Razão Social é obrigatório';
 
-        if (formData.tipoCredor === 'Jurídica' && formData.identificador.length !== 18) {
-            novosErros.cpfCnpj = 'CNPJ inválido';
+        const digits = formData.identificador.replace(/\D/g, '');
+        if (formData.tipoCredor === 'Jurídica') {
+            if (digits.length !== 14) {
+                novosErros.cpfCnpj = 'CNPJ inválido (deve conter 14 dígitos)';
+            } else if (!validateCnpj(formData.identificador)) {
+                novosErros.cpfCnpj = 'CNPJ inválido. Verifique os dígitos informados.';
+            }
         }
-        if (formData.tipoCredor === 'Física' && formData.identificador.length !== 14) {
-            novosErros.cpfCnpj = 'CPF inválido';
+        if (formData.tipoCredor === 'Física') {
+            if (digits.length !== 11) {
+                novosErros.cpfCnpj = 'CPF inválido (deve conter 11 dígitos)';
+            } else if (!validateCpf(formData.identificador)) {
+                novosErros.cpfCnpj = 'CPF inválido. Verifique os dígitos informados.';
+            }
+        }
+
+        // Valida CPF do administrador se preenchido
+        if (formData.cpfAdministrador) {
+            const adminDigits = formData.cpfAdministrador.replace(/\D/g, '');
+            if (adminDigits.length === 11 && !validateCpf(formData.cpfAdministrador)) {
+                novosErros.cpfAdministrador = 'CPF do Administrador inválido. Verifique os dígitos.';
+            }
         }
 
         setErros(novosErros);
 
         if (Object.keys(novosErros).length > 0) {
-            if (novosErros.tipo || novosErros.cpfCnpj || novosErros.nome) {
+            if (novosErros.tipo || novosErros.cpfCnpj || novosErros.nome || novosErros.cpfAdministrador) {
                 setAbaAtiva('identificacao');
             }
         }

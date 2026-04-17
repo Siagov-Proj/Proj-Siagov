@@ -3,6 +3,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { headers } from 'next/headers';
 
 interface LotacaoParams {
     instituicaoId: string;
@@ -43,7 +44,13 @@ export async function createUserWithInvite(data: CreateUserParams) {
         return { error: 'CPF já cadastrado no sistema.' };
     }
 
-    // 2. Invite User via Supabase Auth
+    // 2. Detectar URL base do sistema para construir redirectTo
+    const headersList = await headers();
+    const host = headersList.get('host') || 'localhost:3000';
+    const protocol = headersList.get('x-forwarded-proto') || 'http';
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || `${protocol}://${host}`;
+
+    // 3. Invite User via Supabase Auth
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
         data.emailInstitucional,
         {
@@ -52,7 +59,7 @@ export async function createUserWithInvite(data: CreateUserParams) {
                 cpf: data.cpf,
                 perfil: data.lotacoes[0]?.perfilAcesso || 'consulta'
             },
-            redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/callback`
+            redirectTo: `${appUrl}/auth/callback`
         }
     );
 

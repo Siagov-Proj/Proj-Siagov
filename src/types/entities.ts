@@ -136,7 +136,7 @@ export interface ICargo {
 
 export interface IUsuario {
     id: string;
-    codigo: string;             // 3 dígitos
+    codigo: string;             // 6 dígitos
     instituicaoId: string;
     orgaoId: string;
     unidadeGestoraId: string;

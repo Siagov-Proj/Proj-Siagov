@@ -19,6 +19,8 @@ import { ActionBar } from '@/components/ui/action-bar';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { FileText, ArrowLeft } from 'lucide-react';
 import { FIELD_LIMITS } from '@/utils/constants';
+import { maskCpf, maskCnpj } from '@/utils/masks';
+import { validateCpf, validateCnpj } from '@/utils/formatters';
 
 // Mocks para os seletores
 const mockInstituicoes = [
@@ -113,6 +115,16 @@ export default function NovoProcessoPage() {
         if (!formData.objeto.trim()) novosErros.objeto = 'Objeto da contratação é obrigatório';
         if (!formData.tipo) novosErros.tipo = 'Tipo é obrigatório';
         if (!formData.interessado) novosErros.interessado = 'Interessado é obrigatório';
+        if (formData.cpfCnpjInteressado) {
+            const digits = formData.cpfCnpjInteressado.replace(/\D/g, '');
+            if (digits.length === 11 && !validateCpf(formData.cpfCnpjInteressado)) {
+                novosErros.cpfCnpjInteressado = 'CPF inválido';
+            } else if (digits.length === 14 && !validateCnpj(formData.cpfCnpjInteressado)) {
+                novosErros.cpfCnpjInteressado = 'CNPJ inválido';
+            } else if (digits.length !== 11 && digits.length !== 14) {
+                novosErros.cpfCnpjInteressado = 'CPF (11 dígitos) ou CNPJ (14 dígitos) incompleto';
+            }
+        }
         if (!formData.instituicaoId) novosErros.instituicaoId = 'Instituição é obrigatória';
         if (!formData.orgaoId) novosErros.orgaoId = 'Órgão é obrigatório';
         if (!formData.unidadeGestoraId) novosErros.unidadeGestoraId = 'Unidade Gestora é obrigatória';
@@ -275,6 +287,59 @@ export default function NovoProcessoPage() {
                 </Card>
 
                 {/* Interessado removed to match legacy */}\n
+
+                {/* Interessado e CPF/CNPJ */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Interessado</CardTitle>
+                        <CardDescription>Identificação do interessado no processo</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-1">
+                                    <Label htmlFor="interessado">
+                                        Nome do Interessado<span className="text-red-500 ml-1">*</span>
+                                    </Label>
+                                    <FieldTooltip content="Nome completo da pessoa ou empresa interessada no processo" />
+                                </div>
+                                <Input
+                                    id="interessado"
+                                    value={formData.interessado}
+                                    onChange={(e) => setFormData({ ...formData, interessado: e.target.value })}
+                                    maxLength={150}
+                                    placeholder="Nome completo ou razão social"
+                                    className={erros.interessado ? 'border-red-500' : ''}
+                                />
+                                {erros.interessado && <p className="text-sm text-red-500">{erros.interessado}</p>}
+                            </div>
+
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-1">
+                                    <Label htmlFor="cpfCnpjInteressado">
+                                        CPF / CNPJ do Interessado
+                                    </Label>
+                                    <FieldTooltip content="CPF (pessoa física) ou CNPJ (pessoa juríica) do interessado" />
+                                </div>
+                                <Input
+                                    id="cpfCnpjInteressado"
+                                    value={formData.cpfCnpjInteressado}
+                                    onChange={(e) => {
+                                        const digits = e.target.value.replace(/\D/g, '');
+                                        const masked = digits.length <= 11
+                                            ? maskCpf(e.target.value)
+                                            : maskCnpj(e.target.value);
+                                        setFormData({ ...formData, cpfCnpjInteressado: masked });
+                                    }}
+                                    maxLength={18}
+                                    placeholder="000.000.000-00 ou 00.000.000/0001-00"
+                                    className={erros.cpfCnpjInteressado ? 'border-red-500' : ''}
+                                />
+                                {erros.cpfCnpjInteressado && <p className="text-sm text-red-500">{erros.cpfCnpjInteressado}</p>}
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
 
                 {/* Vinculação Organizacional */}
                 <Card>

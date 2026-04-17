@@ -74,17 +74,18 @@ export default function LoginPage() {
             }}
         >
             {/* Inner container - two columns */}
-            <div className="w-full max-w-5xl mx-auto flex items-center justify-between px-8 md:px-16 gap-8 py-12">
+            <div className="w-full max-w-6xl mx-auto flex items-center justify-between px-8 md:px-16 gap-8 py-12">
 
                 {/* Left Side - SINGRA Logo */}
                 <div className="hidden md:flex flex-col items-center justify-center flex-1">
                     <Image
-                        src="/LogoMarca_SINGRA_Vertical_Com_Nomenclatura.png"
+                        src="/Logo_SINGRA_Vertical.png"
                         alt="SINGRA - Sistema Integrado de Gestão Administrativa"
-                        width={360}
-                        height={300}
+                        width={850}
+                        height={750}
                         priority
-                        className="object-contain drop-shadow-sm"
+                        className="object-contain mix-blend-multiply" 
+                        style={{ filter: "brightness(1.05) contrast(1.05)" }}
                     />
                 </div>
 
@@ -189,16 +190,16 @@ export default function LoginPage() {
 
                         {/* Footer */}
                         <div className="flex flex-col items-center gap-3 pt-2 border-t border-gray-100">
-                            <p className="text-xs text-gray-400">
-                                © 2026 SIAGOV - Todos os direitos reservados
-                            </p>
                             <Image
                                 src="/Logo_SIAGOV.png"
                                 alt="SIAGOV - Assessoria e Consultoria em Gestão Governamental"
                                 width={140}
                                 height={48}
-                                className="object-contain opacity-85"
+                                className="object-contain opacity-85 mt-2"
                             />
+                            <p className="text-xs text-gray-400">
+                                © 2026 SIAGOV - Todos os direitos reservados
+                            </p>
                         </div>
                     </div>
                 </div>

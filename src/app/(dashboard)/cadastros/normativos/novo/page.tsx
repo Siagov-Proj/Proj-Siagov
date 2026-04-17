@@ -49,6 +49,7 @@ import {
 } from '@/services/api';
 import { LeisCadastroDialog } from '@/components/normativos/LeisCadastroDialog';
 import { buildNormativoLabel, stripNormativoCode } from '@/utils';
+import { toast } from 'sonner';
 
 interface ISubcategoriaDraft {
     codigo: string;
@@ -245,10 +246,11 @@ export default function NovoNormativoPage() {
                 });
             }
 
+            toast.success('Categoria salva com sucesso!');
             router.push('/cadastros/normativos');
         } catch (err) {
-            console.error('Erro ao salvar:', err);
-            alert('Erro ao salvar a categoria. Tente novamente.');
+            const message = err instanceof Error ? err.message : 'Erro ao salvar a categoria. Tente novamente.';
+            toast.error(message);
         } finally {
             setSaving(false);
         }
@@ -605,138 +607,74 @@ export default function NovoNormativoPage() {
                         <div className="space-y-6">
                             <div className="flex items-center gap-2 text-primary font-medium">
                                 <FileText className="h-5 w-5 text-purple-500" />
-                                Configuração de Documentos
+                                Resumo e Documentos
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                    <Label>Categoria <span className="text-red-500">*</span></Label>
-                                    <Select disabled value={categoriaFormatada ? 'current' : ''}>
-                                        <SelectTrigger className="bg-muted">
-                                            <SelectValue placeholder={categoriaFormatada || 'Categoria atual'} />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="current">{categoriaFormatada || 'Categoria Atual'}</SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                            {/* Resumo da Categoria */}
+                            <div className="rounded-lg border bg-muted/30 p-5 space-y-3">
+                                <h4 className="text-sm font-semibold text-foreground">Resumo da Categoria</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                                    <div>
+                                        <span className="text-muted-foreground">Categoria:</span>{' '}
+                                        <span className="font-medium">{categoriaFormatada || '—'}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-muted-foreground">Lei:</span>{' '}
+                                        <span className="font-medium">{leis.find(l => l.id === leiId)?.nome || '—'}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-muted-foreground">Título:</span>{' '}
+                                        <span className="font-medium">{nomeTitulo || '—'}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-muted-foreground">Órgãos Vinculados:</span>{' '}
+                                        <span className="font-medium">{orgaosSelecionados.length}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-muted-foreground">Subcategorias:</span>{' '}
+                                        <span className="font-medium">{subcategorias.length}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-muted-foreground">Status:</span>{' '}
+                                        <span className="font-medium">{ativo ? 'Ativo' : 'Inativo'}</span>
+                                    </div>
                                 </div>
 
-                                <div className="space-y-2">
-                                    <Label>Subcategoria <span className="text-red-500">*</span></Label>
-                                    <Select value={subcategoriaSelecionada} onValueChange={setSubcategoriaSelecionada}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Selecione a subcategoria" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {subcategorias.length === 0 ? (
-                                                <SelectItem value="none" disabled>Nenhuma subcategoria</SelectItem>
-                                            ) : (
-                                                subcategorias.map((sub, i) => (
-                                                    <SelectItem key={i} value={buildNormativoLabel(sub.codigo, sub.nome)}>
-                                                        {buildNormativoLabel(sub.codigo, sub.nome)}
-                                                    </SelectItem>
-                                                ))
-                                            )}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label>Unidade Gestora <span className="text-red-500">*</span></Label>
-                                    <Select value={unidadeGestoraId} onValueChange={setUnidadeGestoraId}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Selecione a unidade gestora" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {unidadesGestoras.length === 0 ? (
-                                                <SelectItem value="none" disabled>Nenhuma unidade encontrada</SelectItem>
-                                            ) : (
-                                                unidadesGestoras.map((ug) => (
-                                                    <SelectItem key={ug.id} value={ug.id}>{ug.nome}</SelectItem>
-                                                ))
-                                            )}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label>Setor <span className="text-red-500">*</span></Label>
-                                    <Select value={setorId} onValueChange={setSetorId} disabled={!unidadeGestoraId}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Selecione o setor" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {setores.length === 0 ? (
-                                                <SelectItem value="none" disabled>Nenhum setor encontrado</SelectItem>
-                                            ) : (
-                                                setores.map((setor) => (
-                                                    <SelectItem key={setor.id} value={setor.id}>{setor.nome}</SelectItem>
-                                                ))
-                                            )}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label>Tipo de Documento <span className="text-red-500">*</span></Label>
-                                    <Select>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Selecione o tipo" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="pdf">PDF</SelectItem>
-                                            <SelectItem value="docx">Word (DOCX)</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label>Especialista <span className="text-red-500">*</span></Label>
-                                    <Select>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Selecione o especialista" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="juridico">Jurídico</SelectItem>
-                                            <SelectItem value="tecnico">Técnico</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
+                                {subcategorias.length > 0 && (
+                                    <div className="mt-3 pt-3 border-t">
+                                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Subcategorias cadastradas:</span>
+                                        <ul className="mt-1.5 space-y-1">
+                                            {subcategorias.map((sub, i) => (
+                                                <li key={i} className="text-sm flex items-center gap-2">
+                                                    <span className="font-mono text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded">{sub.codigo}</span>
+                                                    <span>{sub.nome}</span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
                             </div>
 
-                            <div className="space-y-2">
-                                <Label>Objetivo do Documento <span className="text-red-500">*</span></Label>
-                                <Input placeholder="Ex: Analisar legalidade do Pregão 15/2024" />
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label>Contexto e Detalhes <span className="text-red-500">*</span></Label>
-                                <Textarea
-                                    placeholder="Descreva o contexto, dados relevantes e informações adicionais..."
-                                    className="min-h-[100px]"
-                                />
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label>Upload de Documento <span className="text-red-500">*</span></Label>
-                                <Input
-                                    type="file"
-                                    accept=".pdf,.doc,.docx,.xls,.xlsx"
-                                    className="cursor-pointer"
-                                />
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    Formatos permitidos: PDF, DOC, DOCX, DOCM, DOT, DOTX, DOTM, ODT, RTF, TXT e Markdown (Max. 50MB)
-                                </p>
-                            </div>
-
-                            {subcategoriaSelecionada && (
-                                <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 p-4">
-                                    <p className="text-sm font-medium text-primary">Preview da numeracao do documento</p>
-                                    <p className="mt-1 text-sm text-muted-foreground">
-                                        O primeiro documento desta subcategoria sera gerado com prefixo baseado em <span className="font-mono">{subcategoriaSelecionada}</span>.
-                                    </p>
+                            {/* Orientação de documentos */}
+                            <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 p-5">
+                                <div className="flex items-start gap-3">
+                                    <div className="p-2 bg-primary/10 rounded-lg shrink-0">
+                                        <FileText className="h-5 w-5 text-primary" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-medium text-primary">Cadastro de Documentos</p>
+                                        <p className="mt-1 text-sm text-muted-foreground">
+                                            Após salvar a categoria, você poderá cadastrar documentos vinculados diretamente
+                                            pela tela de edição da categoria ou pela seção
+                                            <span className="font-medium"> Normativos → Documentos → Novo Documento</span>.
+                                        </p>
+                                        <p className="mt-2 text-xs text-muted-foreground">
+                                            Cada documento terá os campos de <strong>Formato</strong> (PDF, Word, Excel),
+                                            <strong> Tipo</strong> (Parecer, Nota Técnica, Checklist, etc.), objetivo e anexos.
+                                        </p>
+                                    </div>
                                 </div>
-                            )}
+                            </div>
                         </div>
                     )}
 

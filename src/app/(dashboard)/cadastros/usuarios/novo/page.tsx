@@ -17,7 +17,9 @@ import { ActionBar } from '@/components/ui/action-bar';
 import { FieldTooltip } from '@/components/ui/field-tooltip';
 import { ArrowLeft, Loader2, Plus, Trash2 } from 'lucide-react';
 import { maskCpf } from '@/utils/masks';
+import { validateCpf } from '@/utils/formatters';
 import { FIELD_LIMITS } from '@/utils/constants';
+
 import { createUserWithInvite } from '../actions';
 import {
     instituicoesService,
@@ -224,8 +226,13 @@ export default function NovoUsuarioPage() {
 
         if (!formData.codigo) novosErros.codigo = 'Código é obrigatório';
         if (!formData.nome) novosErros.nome = 'Nome é obrigatório';
-        if (!formData.cpf) novosErros.cpf = 'CPF é obrigatório';
-        if (formData.cpf && formData.cpf.length < 14) novosErros.cpf = 'CPF incompleto';
+        if (!formData.cpf) {
+            novosErros.cpf = 'CPF é obrigatório';
+        } else if (formData.cpf.length < 14) {
+            novosErros.cpf = 'CPF incompleto';
+        } else if (!validateCpf(formData.cpf)) {
+            novosErros.cpf = 'CPF inválido';
+        }
         if (!formData.emailInstitucional) novosErros.emailInstitucional = 'E-mail Institucional é obrigatório';
 
         lotacoes.forEach((lot, i) => {
@@ -595,6 +602,8 @@ export default function NovoUsuarioPage() {
                                     <SelectContent>
                                         <SelectItem value="Efetivo">Efetivo</SelectItem>
                                         <SelectItem value="Efetivo-Comissionado">Efetivo-Comissionado</SelectItem>
+                                        <SelectItem value="Comissionado">Comissionado</SelectItem>
+                                        <SelectItem value="Cumulativo">Cumulativo</SelectItem>
                                         <SelectItem value="CLT">CLT</SelectItem>
                                         <SelectItem value="Estagiário">Estagiário</SelectItem>
                                         <SelectItem value="Requisitado">Requisitado</SelectItem>

@@ -203,8 +203,8 @@ export default function NovoSetorPage() {
                 <CardContent>
                     <div className="grid gap-6">
                         {/* Linha 1: Vinculação Hierárquica e Código */}
-                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                            <div className="space-y-2">
+                        <div className="grid grid-cols-1 xl:grid-cols-12 gap-4">
+                            <div className="xl:col-span-3 space-y-2">
                                 <div className="flex items-center gap-1">
                                     <Label>Instituição<span className="text-red-500 ml-1">*</span></Label>
                                     <FieldTooltip content="Selecione para filtrar órgãos" />
@@ -225,7 +225,7 @@ export default function NovoSetorPage() {
                                         <SelectContent>
                                             {instituicoes.map((inst) => (
                                                 <SelectItem key={inst.id} value={inst.id}>
-                                                    {inst.codigo} - {inst.nome}
+                                                    <span className="truncate block max-w-full">{inst.codigo} - {inst.nome}</span>
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
@@ -234,7 +234,7 @@ export default function NovoSetorPage() {
                                 {errors.instituicaoId && <p className="text-sm text-red-500">{errors.instituicaoId}</p>}
                             </div>
 
-                            <div className="space-y-2">
+                            <div className="xl:col-span-3 space-y-2">
                                 <Label>Órgão<span className="text-red-500 ml-1">*</span></Label>
                                 {loadingOrgaos ? (
                                     <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-muted">
@@ -253,7 +253,7 @@ export default function NovoSetorPage() {
                                         <SelectContent>
                                             {orgaos.map((orgao) => (
                                                 <SelectItem key={orgao.id} value={orgao.id}>
-                                                    {orgao.codigo} - {orgao.nome}
+                                                    <span className="truncate block max-w-full">{orgao.codigo} - {orgao.nome}</span>
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
@@ -262,7 +262,7 @@ export default function NovoSetorPage() {
                                 {errors.orgaoId && <p className="text-sm text-red-500">{errors.orgaoId}</p>}
                             </div>
 
-                            <div className="space-y-2">
+                            <div className="xl:col-span-4 space-y-2 overflow-hidden">
                                 <div className="flex items-center gap-1">
                                     <Label>
                                         Unidade Gestora<span className="text-red-500 ml-1">*</span>
@@ -279,13 +279,15 @@ export default function NovoSetorPage() {
                                         onValueChange={(valor) => setFormData({ ...formData, unidadeGestoraId: valor })}
                                         disabled={!formData.orgaoId}
                                     >
-                                        <SelectTrigger className={errors.unidadeGestoraId ? 'border-red-500' : ''}>
-                                            <SelectValue placeholder={formData.orgaoId ? 'Selecione' : 'Aguardando...'} />
+                                        <SelectTrigger className={`w-full overflow-hidden ${errors.unidadeGestoraId ? 'border-red-500' : ''}`}>
+                                            <div className="truncate w-full text-left">
+                                                <SelectValue placeholder={formData.orgaoId ? 'Selecione' : 'Aguardando...'} />
+                                            </div>
                                         </SelectTrigger>
                                         <SelectContent>
                                             {unidades.map((ug) => (
                                                 <SelectItem key={ug.id} value={ug.id}>
-                                                    {ug.codigo} - {ug.nome}
+                                                    <span className="truncate block max-w-full" title={`${ug.codigo} - ${ug.nome}`}>{ug.codigo} - {ug.nome}</span>
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
@@ -294,7 +296,7 @@ export default function NovoSetorPage() {
                                 {errors.unidadeGestoraId && <p className="text-sm text-red-500">{errors.unidadeGestoraId}</p>}
                             </div>
 
-                            <div className="space-y-2">
+                            <div className="xl:col-span-2 space-y-2">
                                 <div className="flex items-center gap-1">
                                     <Label htmlFor="codigo">Código<span className="text-red-500 ml-1">*</span></Label>
                                     <FieldTooltip content="Código sugerido automaticamente ao selecionar a UG. Pode ser editado." />
@@ -305,7 +307,7 @@ export default function NovoSetorPage() {
                                     onChange={(e) => setFormData({ ...formData, codigo: e.target.value.replace(/\D/g, '').substring(0, 4) })}
                                     maxLength={4}
                                     placeholder={loadingCodigo ? 'Gerando...' : '0000'}
-                                    className={`font-mono ${errors.codigo ? 'border-red-500' : ''}`}
+                                    className={`font-mono w-full ${errors.codigo ? 'border-red-500' : ''}`}
                                 />
                                 {errors.codigo && <p className="text-sm text-red-500">{errors.codigo}</p>}
                             </div>
