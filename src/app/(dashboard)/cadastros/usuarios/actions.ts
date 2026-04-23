@@ -33,11 +33,15 @@ interface CreateUserParams {
 export async function createUserWithInvite(data: CreateUserParams) {
     const supabaseAdmin = createAdminClient();
 
-    // 1. Check if CPF already exists in public.usuarios
+    // Normalize CPF: always store in masked format (XXX.XXX.XXX-XX)
+    const cleanCpf = data.cpf.replace(/\D/g, '');
+    const maskedCpf = cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+
+    // 1. Check if CPF already exists in public.usuarios (both formats)
     const { data: existingUser } = await supabaseAdmin
         .from('usuarios')
         .select('id')
-        .eq('cpf', data.cpf)
+        .or(`cpf.eq.${maskedCpf},cpf.eq.${cleanCpf}`)
         .maybeSingle();
 
     if (existingUser) {
@@ -82,7 +86,7 @@ export async function createUserWithInvite(data: CreateUserParams) {
             id: authUserId,
             codigo: data.codigo,
             nome: data.nome,
-            cpf: data.cpf,
+            cpf: maskedCpf,
             nome_credor: data.nomeCredor,
             matricula: data.matricula,
             vinculo: data.vinculo,

@@ -40,6 +40,8 @@ export async function loginWithCpf(formData: FormData) {
     );
 
     // 1. Lookup Email and User Data by CPF
+    // Busca por ambos os formatos (mascarado e sem máscara) pois a criação pode ter
+    // salvo em qualquer um dos dois formatos
     const { data: userData, error: userError } = await supabaseAdmin
         .from('usuarios')
         .select(`
@@ -54,7 +56,9 @@ export async function loginWithCpf(formData: FormData) {
             cargoId:cargo_id,
             permissoes
         `)
-        .eq('cpf', cpfMasked)
+        .or(`cpf.eq.${cpfMasked},cpf.eq.${cleanNumbers}`)
+        .eq('ativo', true)
+        .eq('excluido', false)
         .maybeSingle();
 
     if (userError || !userData?.email) {
