@@ -19,6 +19,7 @@ import { ArrowLeft, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { maskCpf } from '@/utils/masks';
 import { validateCpf } from '@/utils/formatters';
 import { FIELD_LIMITS } from '@/utils/constants';
+import { updateUserPassword } from '../actions';
 import {
     usuariosService,
     instituicoesService,
@@ -295,10 +296,15 @@ export default function EditarUsuarioPage() {
 
         try {
             setSaving(true);
+
+            // Normalizar CPF para formato mascarado antes de salvar
+            const cpfClean = formData.cpf.replace(/\D/g, '');
+            const cpfMasked = cpfClean.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+
             await usuariosService.atualizar(params.id as string, {
                 codigo: formData.codigo,
                 nome: formData.nome,
-                cpf: formData.cpf.replace(/\D/g, ''),
+                cpf: cpfMasked,
                 nome_credor: formData.nomeCredor,
                 matricula: formData.matricula,
                 vinculo: formData.vinculo,
@@ -314,6 +320,16 @@ export default function EditarUsuarioPage() {
                 cargo_id: formData.cargoId || undefined,
                 permissoes: [formData.perfilAcesso].filter(Boolean),
             });
+
+            // Atualizar senha via Admin API se preenchida
+            if (formData.senha) {
+                const senhaResult = await updateUserPassword(params.id as string, formData.senha);
+                if (senhaResult.error) {
+                    alert(`Dados salvos, mas erro ao alterar senha: ${senhaResult.error}`);
+                    return;
+                }
+            }
+
             router.push('/cadastros/usuarios');
         } catch (err) {
             console.error('Erro ao atualizar usuário:', err);

@@ -1,9 +1,16 @@
 'use server'
 
 import { createAdminClient } from '@/lib/supabase/admin';
-import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
-import { headers } from 'next/headers';
+
+/**
+ * Normaliza CPF para o formato mascarado XXX.XXX.XXX-XX
+ */
+function normalizeCpf(cpf: string): { clean: string; masked: string } {
+    const clean = cpf.replace(/\D/g, '');
+    const masked = clean.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+    return { clean, masked };
+}
 
 interface LotacaoParams {
     instituicaoId: string;
@@ -34,38 +41,35 @@ export async function createUserWithInvite(data: CreateUserParams) {
     const supabaseAdmin = createAdminClient();
 
     // Normalize CPF: always store in masked format (XXX.XXX.XXX-XX)
-    const cleanCpf = data.cpf.replace(/\D/g, '');
-    const maskedCpf = cleanCpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+    const { clean: cleanCpf, masked: maskedCpf } = normalizeCpf(data.cpf);
 
-    // 1. Check if CPF already exists in public.usuarios (both formats)
+    // 1. Check if CPF already exists in public.usuarios (only active, non-deleted)
     const { data: existingUser } = await supabaseAdmin
         .from('usuarios')
         .select('id')
         .or(`cpf.eq.${maskedCpf},cpf.eq.${cleanCpf}`)
+        .eq('excluido', false)
         .maybeSingle();
 
     if (existingUser) {
         return { error: 'CPF já cadastrado no sistema.' };
     }
 
-    // 2. Detectar URL base do sistema para construir redirectTo
-    const headersList = await headers();
-    const host = headersList.get('host') || 'localhost:3000';
-    const protocol = headersList.get('x-forwarded-proto') || 'http';
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || `${protocol}://${host}`;
+    // 2. Criar usuário no Supabase Auth com senha padrão
+    // Usa createUser (em vez de inviteUserByEmail) para que o login funcione imediatamente
+    // sem necessidade de confirmação por email
+    const DEFAULT_PASSWORD = '123456';
 
-    // 3. Invite User via Supabase Auth
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
-        data.emailInstitucional,
-        {
-            data: {
-                nome: data.nome,
-                cpf: data.cpf,
-                perfil: data.lotacoes[0]?.perfilAcesso || 'consulta'
-            },
-            redirectTo: `${appUrl}/auth/callback`
-        }
-    );
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email: data.emailInstitucional,
+        password: DEFAULT_PASSWORD,
+        email_confirm: true, // Marca email como confirmado para login imediato
+        user_metadata: {
+            nome: data.nome,
+            cpf: maskedCpf,
+            perfil: data.lotacoes[0]?.perfilAcesso || 'consulta'
+        },
+    });
 
     if (authError) {
         console.error('Erro ao convidar usuário (Auth):', authError);
@@ -136,5 +140,28 @@ export async function createUserWithInvite(data: CreateUserParams) {
     }
 
     revalidatePath('/cadastros/usuarios');
+    return { success: true };
+}
+
+/**
+ * Atualiza a senha de um usuário via Admin API.
+ * Usada pela tela de edição de usuário (admin editando outro usuário).
+ */
+export async function updateUserPassword(userId: string, newPassword: string) {
+    if (!newPassword || newPassword.length < 6) {
+        return { error: 'A senha deve ter no mínimo 6 caracteres.' };
+    }
+
+    const supabaseAdmin = createAdminClient();
+
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+        password: newPassword,
+    });
+
+    if (error) {
+        console.error('Erro ao atualizar senha:', error);
+        return { error: `Erro ao atualizar senha: ${error.message}` };
+    }
+
     return { success: true };
 }
