@@ -28,12 +28,12 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { ListPagination } from '@/components/ui/list-pagination';
-import { Plus, Search, Eye, MessageSquare, Clock, CheckCircle, AlertCircle, HelpCircle } from 'lucide-react';
+import { Plus, Search, Eye, MessageSquare, Clock, CheckCircle, AlertCircle, HelpCircle, Building2, Users } from 'lucide-react';
 import { formatDateBR } from '@/utils/formatters';
 import { chamadosService, IChamadoDB } from '@/services/api/chamadosService';
 
-const CATEGORIAS = [
-    { value: 'todos', label: 'Todas as Categorias' },
+const SITUACOES = [
+    { value: 'todos', label: 'Todas as Situações' },
     { value: 'Bug', label: 'Bug/Erro' },
     { value: 'Dúvida', label: 'Dúvida' },
     { value: 'Melhoria', label: 'Sugestão de Melhoria' },
@@ -52,7 +52,7 @@ export default function ChamadosPage() {
     const itensPorPagina = 10;
     const [chamados, setChamados] = useState<IChamadoDB[]>([]);
     const [termoBusca, setTermoBusca] = useState('');
-    const [filtroCategoria, setFiltroCategoria] = useState('todos');
+    const [filtroSituacao, setFiltroSituacao] = useState('todos');
     const [filtroStatus, setFiltroStatus] = useState('todos');
     const [paginaAtual, setPaginaAtual] = useState(1);
 
@@ -60,14 +60,14 @@ export default function ChamadosPage() {
         try {
             const data = await chamadosService.listar({
                 termo: termoBusca,
-                categoria: filtroCategoria,
+                situacao: filtroSituacao,
                 status: filtroStatus
             });
             setChamados(data);
         } catch (error) {
             console.error('Erro ao carregar chamados:', error);
         }
-    }, [termoBusca, filtroCategoria, filtroStatus]);
+    }, [termoBusca, filtroSituacao, filtroStatus]);
 
     useEffect(() => {
         // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -77,7 +77,7 @@ export default function ChamadosPage() {
     useEffect(() => {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setPaginaAtual(1);
-    }, [termoBusca, filtroCategoria, filtroStatus]);
+    }, [termoBusca, filtroSituacao, filtroStatus]);
 
     // Estatísticas
     const stats = {
@@ -87,11 +87,7 @@ export default function ChamadosPage() {
         resolvidos: chamados.filter((c) => c.status === 'Resolvido' || c.status === 'Fechado').length,
     };
 
-    // (Helper functions remain)
-
-    // Filtrar chamados
-    // const chamadosFiltrados = mockChamados.filter((chamado) => { ... });
-    // Note: Filtering is now handled by the backend service.
+    // Filtering is handled by the backend service.
     // 'chamados' state already contains filtered data.
     const chamadosFiltrados = chamados;
     const chamadosPaginados = chamadosFiltrados.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
@@ -107,8 +103,8 @@ export default function ChamadosPage() {
         }
     };
 
-    const obterCorCategoria = (categoria: string) => {
-        switch (categoria) {
+    const obterCorSituacao = (situacao: string) => {
+        switch (situacao) {
             case 'Bug': return 'destructive';
             case 'Dúvida': return 'secondary';
             case 'Melhoria': return 'default';
@@ -116,8 +112,8 @@ export default function ChamadosPage() {
         }
     };
 
-    const obterIconeCategoria = (categoria: string) => {
-        switch (categoria) {
+    const obterIconeSituacao = (situacao: string) => {
+        switch (situacao) {
             case 'Bug': return <AlertCircle className="h-4 w-4" />;
             case 'Dúvida': return <HelpCircle className="h-4 w-4" />;
             case 'Melhoria': return <MessageSquare className="h-4 w-4" />;
@@ -206,14 +202,14 @@ export default function ChamadosPage() {
                                 className="pl-9"
                             />
                         </div>
-                        <Select value={filtroCategoria} onValueChange={setFiltroCategoria}>
+                        <Select value={filtroSituacao} onValueChange={setFiltroSituacao}>
                             <SelectTrigger className="w-full sm:w-[200px]">
-                                <SelectValue placeholder="Categoria" />
+                                <SelectValue placeholder="Situação" />
                             </SelectTrigger>
                             <SelectContent>
-                                {CATEGORIAS.map((cat) => (
-                                    <SelectItem key={cat.value} value={cat.value}>
-                                        {cat.label}
+                                {SITUACOES.map((sit) => (
+                                    <SelectItem key={sit.value} value={sit.value}>
+                                        {sit.label}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
@@ -249,7 +245,9 @@ export default function ChamadosPage() {
                                 <TableRow>
                                     <TableHead className="w-28">Protocolo</TableHead>
                                     <TableHead>Assunto</TableHead>
-                                    <TableHead className="w-28">Categoria</TableHead>
+                                    <TableHead className="w-40">Órgão</TableHead>
+                                    <TableHead className="w-36">Setor</TableHead>
+                                    <TableHead className="w-28">Situação</TableHead>
                                     <TableHead className="w-36">Status</TableHead>
                                     <TableHead className="w-28">SLA</TableHead>
                                     <TableHead className="w-24 text-center">Mensagens</TableHead>
@@ -259,7 +257,7 @@ export default function ChamadosPage() {
                             <TableBody>
                                 {chamadosFiltrados.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                                        <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                                             Nenhum chamado encontrado com os filtros aplicados.
                                         </TableCell>
                                     </TableRow>
@@ -278,10 +276,34 @@ export default function ChamadosPage() {
                                                 </div>
                                             </TableCell>
                                             <TableCell>
-                                                <Badge variant={obterCorCategoria(chamado.categoria)}>
+                                                {chamado.orgao_nome ? (
+                                                    <span className="flex items-center gap-1.5 text-sm">
+                                                        <Building2 className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                                                        <span className="truncate max-w-[120px]" title={chamado.orgao_nome}>
+                                                            {chamado.orgao_nome}
+                                                        </span>
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-muted-foreground text-sm">-</span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                {chamado.setor_nome ? (
+                                                    <span className="flex items-center gap-1.5 text-sm">
+                                                        <Users className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                                                        <span className="truncate max-w-[110px]" title={chamado.setor_nome}>
+                                                            {chamado.setor_nome}
+                                                        </span>
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-muted-foreground text-sm">-</span>
+                                                )}
+                                            </TableCell>
+                                            <TableCell>
+                                                <Badge variant={obterCorSituacao(chamado.situacao)}>
                                                     <span className="flex items-center gap-1">
-                                                        {obterIconeCategoria(chamado.categoria)}
-                                                        {chamado.categoria}
+                                                        {obterIconeSituacao(chamado.situacao)}
+                                                        {chamado.situacao}
                                                     </span>
                                                 </Badge>
                                             </TableCell>

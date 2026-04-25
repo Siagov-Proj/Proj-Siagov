@@ -3,37 +3,78 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { chamadosService, IChamadoDB } from '@/services/api/chamadosService';
+import { chamadosService, IChamadoDB, IChamadoAnexoDB } from '@/services/api/chamadosService';
+import { getSupabaseClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Send, MessageSquare, Clock, User, AlertCircle } from 'lucide-react';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from '@/components/ui/dialog';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { ArrowLeft, Send, MessageSquare, Clock, User, AlertCircle, Building2, Users, Download, FileText, Image, Video, Paperclip, FolderOpen, XCircle, Pencil } from 'lucide-react';
 import { formatDateTimeBR } from '@/utils/formatters';
 
 type IChamadoMensagem = Awaited<ReturnType<typeof chamadosService.listarMensagens>>[number];
 
-// (Mock data removed)
+function obterIconeArquivo(tipo?: string) {
+    if (!tipo) return <FileText className="h-4 w-4 text-blue-500" />;
+    if (tipo.startsWith('image/')) return <Image className="h-4 w-4 text-green-500" />;
+    if (tipo.startsWith('video/')) return <Video className="h-4 w-4 text-purple-500" />;
+    return <FileText className="h-4 w-4 text-blue-500" />;
+}
 
 export default function DetalheChamadoPage() {
     const params = useParams();
     const id = params.id as string;
     const [chamado, setChamado] = useState<IChamadoDB | null>(null);
     const [mensagens, setMensagens] = useState<IChamadoMensagem[]>([]);
+    const [anexos, setAnexos] = useState<IChamadoAnexoDB[]>([]);
     const [loading, setLoading] = useState(true);
     const [novaMensagem, setNovaMensagem] = useState('');
     const [enviando, setEnviando] = useState(false);
+    const [baixando, setBaixando] = useState<string | null>(null);
+    const [encerrando, setEncerrando] = useState(false);
+    const [nomeUsuario, setNomeUsuario] = useState('Usuário');
+
+    // Estados de Edição
+    const [editModalOpen, setEditModalOpen] = useState(false);
+    const [editSituacao, setEditSituacao] = useState('');
+    const [editStatus, setEditStatus] = useState('');
+    const [editPrioridade, setEditPrioridade] = useState('');
+    const [salvandoEdicao, setSalvandoEdicao] = useState(false);
+
+    useEffect(() => {
+        if (chamado) {
+            setEditSituacao(chamado.situacao);
+            setEditStatus(chamado.status);
+            setEditPrioridade(chamado.prioridade);
+        }
+    }, [chamado]);
 
     const carregarDados = useCallback(async () => {
         if (!id) return;
         setLoading(true);
         try {
-            const [chamadoData, msgData] = await Promise.all([
+            const [chamadoData, msgData, anexosData] = await Promise.all([
                 chamadosService.obterPorId(id),
-                chamadosService.listarMensagens(id)
+                chamadosService.listarMensagens(id),
+                chamadosService.listarAnexos(id),
             ]);
             setChamado(chamadoData);
             setMensagens(msgData);
+            setAnexos(anexosData);
         } catch (error) {
             console.error('Erro ao carregar detalhe:', error);
         } finally {
@@ -45,20 +86,87 @@ export default function DetalheChamadoPage() {
         carregarDados();
     }, [carregarDados]);
 
+    // Carregar nome do usuário logado
+    useEffect(() => {
+        async function carregarUsuario() {
+            try {
+                const supabase = getSupabaseClient();
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user?.email) return;
+                const { data: userData } = await supabase
+                    .from('usuarios')
+                    .select('nome')
+                    .eq('email_institucional', user.email)
+                    .eq('ativo', true)
+                    .eq('excluido', false)
+                    .maybeSingle();
+                if (userData?.nome) setNomeUsuario(userData.nome);
+            } catch { /* silent */ }
+        }
+        carregarUsuario();
+    }, []);
+
     const enviarMensagem = async () => {
         if (!novaMensagem.trim() || !id) return;
 
         setEnviando(true);
         try {
-            await chamadosService.enviarMensagem(id, novaMensagem, 'Usuario Teste'); // TODO: Get from Auth
+            await chamadosService.enviarMensagem(id, novaMensagem, nomeUsuario);
             setNovaMensagem('');
-            // Refresh messages
             const msgs = await chamadosService.listarMensagens(id);
             setMensagens(msgs);
         } catch (error) {
             console.error('Erro ao enviar mensagem:', error);
         } finally {
             setEnviando(false);
+        }
+    };
+
+    const encerrarChamado = async () => {
+        if (!id || !chamado) return;
+        setEncerrando(true);
+        try {
+            await chamadosService.atualizar(id, { status: 'Fechado' });
+            // Refresh
+            const chamadoAtualizado = await chamadosService.obterPorId(id);
+            setChamado(chamadoAtualizado);
+        } catch (error) {
+            console.error('Erro ao encerrar chamado:', error);
+        } finally {
+            setEncerrando(false);
+        }
+    };
+
+    const salvarEdicao = async () => {
+        if (!id) return;
+        setSalvandoEdicao(true);
+        try {
+            await chamadosService.atualizar(id, {
+                situacao: editSituacao as IChamadoDB['situacao'],
+                status: editStatus as IChamadoDB['status'],
+                prioridade: editPrioridade as IChamadoDB['prioridade'],
+            });
+            setEditModalOpen(false);
+            const chamadoAtualizado = await chamadosService.obterPorId(id);
+            setChamado(chamadoAtualizado);
+        } catch (error) {
+            console.error('Erro ao salvar edição:', error);
+        } finally {
+            setSalvandoEdicao(false);
+        }
+    };
+
+    const baixarAnexo = async (anexo: IChamadoAnexoDB) => {
+        if (!anexo.url) return;
+        setBaixando(anexo.id);
+        try {
+            // URL é o storage path direto (bucket é privado)
+            const signedUrl = await chamadosService.gerarUrlDownloadAnexo(anexo.url);
+            window.open(signedUrl, '_blank');
+        } catch (error) {
+            console.error('Erro ao baixar anexo:', error);
+        } finally {
+            setBaixando(null);
         }
     };
 
@@ -104,7 +212,26 @@ export default function DetalheChamadoPage() {
                         <p className="text-muted-foreground">{chamado.assunto}</p>
                     </div>
                 </div>
-                <Button variant="outline">Encerrar Chamado</Button>
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="outline"
+                        onClick={() => setEditModalOpen(true)}
+                    >
+                        <Pencil className="mr-2 h-4 w-4" />
+                        Editar
+                    </Button>
+                    {chamado.status !== 'Fechado' && chamado.status !== 'Resolvido' && (
+                        <Button
+                            variant="outline"
+                            onClick={encerrarChamado}
+                            disabled={encerrando}
+                            className="text-red-600 border-red-200 hover:bg-red-50 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-950"
+                        >
+                            <XCircle className="mr-2 h-4 w-4" />
+                            {encerrando ? 'Encerrando...' : 'Encerrar Chamado'}
+                        </Button>
+                    )}
+                </div>
             </div>
 
             {/* Layout Grid */}
@@ -152,6 +279,50 @@ export default function DetalheChamadoPage() {
                         </CardContent>
                     </Card>
 
+                    {/* Anexos */}
+                    {anexos.length > 0 && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Paperclip className="h-5 w-5" />
+                                    Anexos
+                                </CardTitle>
+                                <CardDescription>
+                                    {anexos.length} arquivo(s) anexado(s)
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-2">
+                                    {anexos.map((anexo) => (
+                                        <div
+                                            key={anexo.id}
+                                            className="flex items-center gap-3 p-3 rounded-lg border bg-muted/30 hover:bg-muted/50 transition-colors"
+                                        >
+                                            <div className="flex-shrink-0">
+                                                {obterIconeArquivo(anexo.tipo_mime)}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-medium truncate">{anexo.nome}</p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {anexo.tamanho || '-'} • {formatDateTimeBR(anexo.created_at)}
+                                                </p>
+                                            </div>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => baixarAnexo(anexo)}
+                                                disabled={baixando === anexo.id}
+                                            >
+                                                <Download className="h-4 w-4 mr-1" />
+                                                {baixando === anexo.id ? 'Baixando...' : 'Baixar'}
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+
                     {/* Adicionar Mensagem */}
                     <Card>
                         <CardHeader>
@@ -176,7 +347,8 @@ export default function DetalheChamadoPage() {
                 </div>
 
                 {/* Informações Laterais */}
-                <div>
+                <div className="space-y-6">
+                    {/* Informações Básicas */}
                     <Card>
                         <CardHeader>
                             <CardTitle>Informações</CardTitle>
@@ -187,8 +359,8 @@ export default function DetalheChamadoPage() {
                                 <p className="font-mono font-medium">#{chamado.protocolo}</p>
                             </div>
                             <div>
-                                <p className="text-sm text-muted-foreground mb-1">Categoria</p>
-                                <Badge variant="secondary">{chamado.categoria}</Badge>
+                                <p className="text-sm text-muted-foreground mb-1">Situação</p>
+                                <Badge variant="secondary">{chamado.situacao}</Badge>
                             </div>
                             <div>
                                 <p className="text-sm text-muted-foreground mb-1">Prioridade</p>
@@ -215,8 +387,124 @@ export default function DetalheChamadoPage() {
                             )}
                         </CardContent>
                     </Card>
+
+                    {/* Órgão e Setor */}
+                    {(chamado.orgao_nome || chamado.setor_nome) && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Building2 className="h-5 w-5" />
+                                    Lotação
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                {chamado.orgao_nome && (
+                                    <div>
+                                        <p className="text-sm text-muted-foreground mb-1 flex items-center gap-1.5">
+                                            <Building2 className="h-3.5 w-3.5" />
+                                            Órgão
+                                        </p>
+                                        <p className="font-medium text-sm">{chamado.orgao_nome}</p>
+                                    </div>
+                                )}
+                                {chamado.setor_nome && (
+                                    <div>
+                                        <p className="text-sm text-muted-foreground mb-1 flex items-center gap-1.5">
+                                            <Users className="h-3.5 w-3.5" />
+                                            Setor
+                                        </p>
+                                        <p className="font-medium text-sm">{chamado.setor_nome}</p>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* Categoria/Subcategoria do Documento */}
+                    {(chamado.categoria_documento_nome || chamado.subcategoria_documento_nome) && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <FolderOpen className="h-5 w-5" />
+                                    Documento Relacionado
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                {chamado.categoria_documento_nome && (
+                                    <div>
+                                        <p className="text-sm text-muted-foreground mb-1">Categoria</p>
+                                        <p className="font-medium text-sm">{chamado.categoria_documento_nome}</p>
+                                    </div>
+                                )}
+                                {chamado.subcategoria_documento_nome && (
+                                    <div>
+                                        <p className="text-sm text-muted-foreground mb-1">Subcategoria</p>
+                                        <p className="font-medium text-sm">{chamado.subcategoria_documento_nome}</p>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    )}
                 </div>
             </div>
+
+            {/* Modal de Edição */}
+            <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle>Editar Chamado #{chamado.protocolo}</DialogTitle>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Situação</label>
+                            <Select value={editSituacao} onValueChange={setEditSituacao}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecione a situação" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Bug">Bug/Erro</SelectItem>
+                                    <SelectItem value="Dúvida">Dúvida</SelectItem>
+                                    <SelectItem value="Melhoria">Sugestão de Melhoria</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Status</label>
+                            <Select value={editStatus} onValueChange={setEditStatus}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecione o status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Aberto">Aberto</SelectItem>
+                                    <SelectItem value="Em Atendimento">Em Atendimento</SelectItem>
+                                    <SelectItem value="Aguardando Resposta">Aguardando Resposta</SelectItem>
+                                    <SelectItem value="Resolvido">Resolvido</SelectItem>
+                                    <SelectItem value="Fechado">Fechado</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Prioridade</label>
+                            <Select value={editPrioridade} onValueChange={setEditPrioridade}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecione a prioridade" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Baixa">Baixa</SelectItem>
+                                    <SelectItem value="Média">Média</SelectItem>
+                                    <SelectItem value="Alta">Alta</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setEditModalOpen(false)}>Cancelar</Button>
+                        <Button onClick={salvarEdicao} disabled={salvandoEdicao}>
+                            {salvandoEdicao ? 'Salvando...' : 'Salvar Alterações'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

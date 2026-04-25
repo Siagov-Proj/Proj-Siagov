@@ -147,15 +147,31 @@ export default function DocumentosPage() {
             setDocumentos(docsData);
             setEstruturasMenu(estruturasFinal);
             setProcessos(procsData);
-            setLeis(leisData);
+            
+            // Ordem das leis: Lei 14.133/2021 | Lei 13.019/14 | Lei 8.666/93
+            const orderList = ['14.133', '13.019', '8.666'];
+            const leisFinal = [...leisData].sort((a, b) => {
+                const aIdx = orderList.findIndex(o => a.nome.includes(o));
+                const bIdx = orderList.findIndex(o => b.nome.includes(o));
+                const realAIdx = aIdx === -1 ? 99 : aIdx;
+                const realBIdx = bIdx === -1 ? 99 : bIdx;
+                return realAIdx - realBIdx;
+            });
+            setLeis(leisFinal);
 
-            // Auto-expand o primeiro título se existir
-            if (estruturasFinal.length > 0) {
-                setTituloExpandido(estruturasFinal[0].tituloId);
+            const leiPadrao = leisFinal.find(l => l.nome.includes('14.133')) || (leisFinal.length > 0 ? leisFinal[0] : null);
+
+            if (leiPadrao) {
+                setFiltroLei(leiPadrao.id);
             }
 
-            // Auto-selecionar a primeira lei se houver, para manter coerência visual (opcional - mantive padrão null/todas)
-
+            // Auto-expand o primeiro título se existir, considerando a lei padrão
+            if (estruturasFinal.length > 0 && leiPadrao) {
+                const titulosDaLei = estruturasFinal.filter(group => group.categorias.some(c => c.titulo?.lei_id === leiPadrao.id));
+                if (titulosDaLei.length > 0) {
+                    setTituloExpandido(titulosDaLei[0].tituloId);
+                }
+            }
         } catch (error) {
             console.error('Erro ao carregar documentos:', error);
         } finally {
