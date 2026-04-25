@@ -514,11 +514,11 @@ export default function DocumentosPage() {
                                             >
                                                 <TableCell className="py-4">
                                                     <div className="flex items-start gap-3">
-                                                        <div className="min-w-[108px] rounded-md border border-sky-400/30 bg-sky-500/15 px-2 py-1 text-center">
-                                                            <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-sky-200/80">
+                                                        <div className="min-w-[108px] rounded-md border border-sky-200 bg-sky-50 px-2 py-1 text-center dark:border-sky-400/30 dark:bg-sky-500/15">
+                                                            <span className="block text-[10px] font-semibold uppercase tracking-[0.12em] text-sky-600 dark:text-sky-200/80">
                                                                 Codigo
                                                             </span>
-                                                            <span className="block text-sm font-semibold text-sky-100">
+                                                            <span className="block text-sm font-semibold text-sky-950 dark:text-sky-100">
                                                                 {doc.numero || '-'}
                                                             </span>
                                                         </div>
@@ -547,7 +547,7 @@ export default function DocumentosPage() {
                                                         variant="ghost"
                                                         size="icon"
                                                         title="Baixar Arquivo"
-                                                        className="h-9 w-9 text-sky-200 hover:bg-sky-500/15 hover:text-sky-100"
+                                                        className="h-9 w-9 text-sky-600 hover:bg-sky-100 hover:text-sky-900 dark:text-sky-200 dark:hover:bg-sky-500/15 dark:hover:text-sky-100"
                                                         onClick={(event) => {
                                                             event.stopPropagation();
                                                             baixarArquivo(doc);
